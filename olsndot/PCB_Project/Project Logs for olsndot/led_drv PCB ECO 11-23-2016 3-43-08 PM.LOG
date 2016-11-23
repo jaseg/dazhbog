@@ -1,0 +1,7 @@
+Removed Pin From Net: NetName=SWCLK Pin=J5-3
+Removed Pin From Net: NetName=SWCLK Pin=U3-19
+Added Pin To Net: NetName=SWDIO Pin=J5-3
+Added Pin To Net: NetName=SWDIO Pin=U3-19
+Added Net: Name=SWDIO
+Added Member To Class: ClassName=main Member=Component LED1 KP-1608MGC
+Added Member To Class: ClassName=main Member=Component LED2 KP-1608MGC
