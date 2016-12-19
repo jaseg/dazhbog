@@ -8,6 +8,15 @@
  */
 
 int main(void) {
+    RCC->CR |= RCC_CR_HSEON;
+    while (!(RCC->CR&RCC_CR_HSERDY));
+    RCC->CFGR &= RCC_CFGR_PLLMUL_Msk & RCC_CFGR_SW_Msk;
+    RCC->CFGR |= (2<<RCC_CFGR_PLLMUL_Pos) | RCC_CFGR_PLLSRC; /* PLL x4 */
+    RCC->CR |= RCC_CR_PLLON;
+    while (!(RCC->CR&RCC_CR_PLLRDY));
+    RCC->CFGR |= (2<<RCC_CFGR_SW_Pos);
+    SystemCoreClockUpdate();
+
     LL_Init1msTick(SystemCoreClock);
 
     RCC->AHBENR  |= RCC_AHBENR_GPIOAEN | RCC_AHBENR_GPIOBEN;
@@ -63,12 +72,13 @@ int main(void) {
     TIM1->SMCR = 0;
     TIM1->DIER = 0;
 
-    TIM1->PSC = 8; // debug
+    const uint32_t period = 4;
+    TIM1->PSC = 4; // debug
     /* CH2 - clear/!MR, CH3 - strobe/STCP */
-    TIM1->CCR2 = 498;
-    TIM1->CCR3 = 499;
+    TIM1->CCR2 = 1;
+    TIM1->CCR3 = period-1;
     TIM1->RCR = 0;
-    TIM1->BDTR  = TIM_BDTR_MOE | (20<<TIM_BDTR_DTG_Pos);
+    TIM1->BDTR  = TIM_BDTR_MOE | (15<<TIM_BDTR_DTG_Pos);
     TIM1->CCMR1 = (7<<TIM_CCMR1_OC2M_Pos); // | TIM_CCMR1_OC2PE;
     TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos); // | TIM_CCMR2_OC3PE;
     TIM1->CCER |= TIM_CCER_CC2E | TIM_CCER_CC2NE | TIM_CCER_CC2P | TIM_CCER_CC3E;
@@ -82,16 +92,15 @@ int main(void) {
 //    NVIC_SetPriority(TIM1_CC_IRQn, 2);
 
     for (;;) {
-        GPIOA->BSRR = GPIO_BSRR_BS_6 | GPIO_BSRR_BR_4;
-        TIM1->CNT = 499;
-        TIM1->ARR = 500;
+        GPIOA->ODR ^= GPIO_ODR_6;
+        TIM1->CNT = period-1;
+        TIM1->ARR = period;
         TIM1->EGR |= TIM_EGR_UG;
         TIM1->ARR = 2;
         TIM1->CR1 |= TIM_CR1_CEN;
-        LL_mDelay(4);
         GPIOA->BSRR = GPIO_BSRR_BR_6 | GPIO_BSRR_BR_4;
         LL_mDelay(1);
-        SPI1->DR = 0xcc<<8;
+        SPI1->DR = 0x88<<8;
         while (SPI1->SR & SPI_SR_BSY);
     }
 }
