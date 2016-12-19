@@ -58,39 +58,41 @@ int main(void) {
     /* 8N1, 115200Bd */
 //    TIM1->CR1 = TIM_CR1_OPM | TIM_CR1_URS;
 //    TIM1->CR1 = TIM_CR1_ARPE | TIM_CR1_URS;
-    TIM1->CR1 = TIM_CR1_URS;
+    TIM1->CR1 = TIM_CR1_ARPE | TIM_CR1_OPM; // | TIM_CR1_URS;
     TIM1->CR2 = 0; //TIM_CR2_CCPC;
     TIM1->SMCR = 0;
     TIM1->DIER = 0;
 
-    TIM1->PSC = 1000; // debug
-    TIM1->ARR = 64;
+    TIM1->PSC = 8; // debug
     /* CH2 - clear/!MR, CH3 - strobe/STCP */
-    TIM1->CCR2 = 60;
-    TIM1->CCR3 = 1;
-//    TIM1->RCR = 4;
-    TIM1->BDTR |= TIM_BDTR_MOE;
-    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos); // | TIM_CCMR1_OC2PE;
-    TIM1->CCMR2 = (7<<TIM_CCMR2_OC3M_Pos); // | TIM_CCMR2_OC3PE;
-    TIM1->CCER |= TIM_CCER_CC2E | TIM_CCER_CC3E;
+    TIM1->CCR2 = 498;
+    TIM1->CCR3 = 499;
+    TIM1->RCR = 0;
+    TIM1->BDTR  = TIM_BDTR_MOE | (20<<TIM_BDTR_DTG_Pos);
+    TIM1->CCMR1 = (7<<TIM_CCMR1_OC2M_Pos); // | TIM_CCMR1_OC2PE;
+    TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos); // | TIM_CCMR2_OC3PE;
+    TIM1->CCER |= TIM_CCER_CC2E | TIM_CCER_CC2NE | TIM_CCER_CC2P | TIM_CCER_CC3E;
 //    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos) | TIM_CCMR1_OC2PE;
 //    TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE;
 //    TIM1->CCER = TIM_CCER_CC2E | TIM_CCER_CC3E;
 //    TIM1->BDTR = TIM_BDTR_MOE;
 //    TIM1->DIER = TIM_DIER_UIE;
-//    TIM1->EGR |= TIM_EGR_UG;
-    TIM1->CR1 |= TIM_CR1_CEN;
 
 //    NVIC_EnableIRQ(TIM1_CC_IRQn);
 //    NVIC_SetPriority(TIM1_CC_IRQn, 2);
 
     for (;;) {
         GPIOA->BSRR = GPIO_BSRR_BS_6 | GPIO_BSRR_BR_4;
-        GPIOA->BSRR = (!!(TIM1->CNT&32))<<4;
-        LL_mDelay(1);
+        TIM1->CNT = 499;
+        TIM1->ARR = 500;
+        TIM1->EGR |= TIM_EGR_UG;
+        TIM1->ARR = 2;
+        TIM1->CR1 |= TIM_CR1_CEN;
+        LL_mDelay(4);
         GPIOA->BSRR = GPIO_BSRR_BR_6 | GPIO_BSRR_BR_4;
-        GPIOA->BSRR = (!!(TIM1->CNT&32))<<4;
         LL_mDelay(1);
+        SPI1->DR = 0xcc<<8;
+        while (SPI1->SR & SPI_SR_BSY);
     }
 }
 
