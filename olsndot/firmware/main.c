@@ -56,23 +56,41 @@ int main(void) {
     /* Configure TIM1 for display strobe generation */
     /* Configure UART for RS485 comm */
     /* 8N1, 115200Bd */
-    TIM1->CR1 = TIM_CR1_OPM | TIM_CR1_ARPE | TIM_CR1_URS;
-    TIM1->PSC = 256; // debug
-    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos) | TIM_CCMR1_OC2PE;
-    TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE;
-    TIM1->CCER = TIM_CCER_CC2E | TIM_CCER_CC3E;
-    TIM1->BDTR = TIM_BDTR_MOE;
-    TIM1->RCR = 2;
-    TIM1->DIER = TIM_DIER_UIE;
+//    TIM1->CR1 = TIM_CR1_OPM | TIM_CR1_URS;
+//    TIM1->CR1 = TIM_CR1_ARPE | TIM_CR1_URS;
+    TIM1->CR1 = TIM_CR1_URS;
+    TIM1->CR2 = 0; //TIM_CR2_CCPC;
+    TIM1->SMCR = 0;
+    TIM1->DIER = 0;
 
-    NVIC_EnableIRQ(TIM1_BRK_UP_TRG_COM_IRQn);
-    NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 2);
-
-    TIM1->ARR = 1024;
-    TIM1->EGR |= TIM_EGR_UG;
+    TIM1->PSC = 1000; // debug
+    TIM1->ARR = 64;
+    /* CH2 - clear/!MR, CH3 - strobe/STCP */
+    TIM1->CCR2 = 60;
+    TIM1->CCR3 = 1;
+//    TIM1->RCR = 4;
+    TIM1->BDTR |= TIM_BDTR_MOE;
+    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos); // | TIM_CCMR1_OC2PE;
+    TIM1->CCMR2 = (7<<TIM_CCMR2_OC3M_Pos); // | TIM_CCMR2_OC3PE;
+    TIM1->CCER |= TIM_CCER_CC2E | TIM_CCER_CC3E;
+//    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos) | TIM_CCMR1_OC2PE;
+//    TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE;
+//    TIM1->CCER = TIM_CCER_CC2E | TIM_CCER_CC3E;
+//    TIM1->BDTR = TIM_BDTR_MOE;
+//    TIM1->DIER = TIM_DIER_UIE;
+//    TIM1->EGR |= TIM_EGR_UG;
     TIM1->CR1 |= TIM_CR1_CEN;
 
+//    NVIC_EnableIRQ(TIM1_CC_IRQn);
+//    NVIC_SetPriority(TIM1_CC_IRQn, 2);
+
     for (;;) {
+        GPIOA->BSRR = GPIO_BSRR_BS_6 | GPIO_BSRR_BR_4;
+        GPIOA->BSRR = (!!(TIM1->CNT&32))<<4;
+        LL_mDelay(1);
+        GPIOA->BSRR = GPIO_BSRR_BR_6 | GPIO_BSRR_BR_4;
+        GPIOA->BSRR = (!!(TIM1->CNT&32))<<4;
+        LL_mDelay(1);
     }
 }
 
@@ -81,9 +99,11 @@ uint8_t brightness_by_bit[NBITS] = {
     0x11, 0x22, 0x44, 0x88
 };
 
-void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {
+void TIM1_CC_IRQHandler(void) {
     static uint32_t bitpos = 0;
     bitpos = (bitpos+1)&(NBITS-1);
+
+    GPIOA->ODR ^= GPIO_ODR_6 | GPIO_ODR_4;
 
 //    SPI1->DR = ((uint32_t)brightness_by_bit[bitpos])<<8;
     SPI1->DR = (bitpos<<8) | (bitpos<<10) | (bitpos<<12) | (bitpos<<14);
@@ -95,14 +115,13 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {
     uint32_t period = base_val<<bitpos;
 
 //    TIM1->ARR = period;
-    TIM1->ARR = 1024;
-    TIM1->CCR3 = cycles_strobe; /* strobe */
-    TIM1->CCR2 = period-cycles_clear; /* clear */
-    TIM1->EGR |= TIM_EGR_UG;
+//    TIM1->ARR = 1024;
+//    TIM1->CCR3 = cycles_strobe; /* strobe */
+//    TIM1->CCR2 = period-cycles_clear; /* clear */
+//    TIM1->EGR |= TIM_EGR_UG;
 //    TIM1->ARR = cycles_strobe+1;
 //    LL_mDelay(1);
 //    TIM1->CR1 |= TIM_CR1_CEN;
-//    GPIOA->BSRR = GPIO_BSRR_BR_4 | GPIO_BSRR_BS_6;
 }
 
 void NMI_Handler(void) {
