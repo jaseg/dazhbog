@@ -10,7 +10,7 @@
 int main(void) {
     RCC->CR |= RCC_CR_HSEON;
     while (!(RCC->CR&RCC_CR_HSERDY));
-    RCC->CFGR &= RCC_CFGR_PLLMUL_Msk & RCC_CFGR_SW_Msk;
+    RCC->CFGR &= ~RCC_CFGR_PLLMUL_Msk & ~RCC_CFGR_SW_Msk;
     RCC->CFGR |= (2<<RCC_CFGR_PLLMUL_Pos) | RCC_CFGR_PLLSRC; /* PLL x4 */
     RCC->CR |= RCC_CR_PLLON;
     while (!(RCC->CR&RCC_CR_PLLRDY));
@@ -41,10 +41,12 @@ int main(void) {
 
     /* Set shift register IO GPIO output speed */
     GPIOA->OSPEEDR |=
-          (1<<GPIO_OSPEEDR_OSPEEDR5_Pos)  /* SCLK   */
-        | (1<<GPIO_OSPEEDR_OSPEEDR7_Pos)  /* MOSI   */
-        | (1<<GPIO_OSPEEDR_OSPEEDR9_Pos)  /* Clear */
-        | (1<<GPIO_OSPEEDR_OSPEEDR10_Pos);/* Strobe */
+          (3<<GPIO_OSPEEDR_OSPEEDR4_Pos)  /* LED1   */
+        | (3<<GPIO_OSPEEDR_OSPEEDR5_Pos)  /* SCLK   */
+        | (3<<GPIO_OSPEEDR_OSPEEDR6_Pos)  /* LED2   */
+        | (3<<GPIO_OSPEEDR_OSPEEDR7_Pos)  /* MOSI   */
+        | (3<<GPIO_OSPEEDR_OSPEEDR9_Pos)  /* Clear */
+        | (3<<GPIO_OSPEEDR_OSPEEDR10_Pos);/* Strobe */
 
     GPIOA->AFR[0] |=
           (1<<GPIO_AFRL_AFRL2_Pos)   /* USART1_TX */
@@ -60,7 +62,7 @@ int main(void) {
     /* Configure SPI controller */
     /* CPOL=0, CPHA=0, prescaler=8 -> 1MBd */
 //    SPI1->CR1 = SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE | (2<<SPI_CR1_BR_Pos) | SPI_CR1_MSTR;
-    SPI1->CR1 = SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE | (7<<SPI_CR1_BR_Pos) | SPI_CR1_MSTR;
+    SPI1->CR1 = SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE | (0<<SPI_CR1_BR_Pos) | SPI_CR1_MSTR;
     SPI1->CR2 = (7<<SPI_CR2_DS_Pos);
     /* Configure TIM1 for display strobe generation */
     /* Configure UART for RS485 comm */
@@ -72,36 +74,27 @@ int main(void) {
     TIM1->SMCR = 0;
     TIM1->DIER = 0;
 
-    const uint32_t period = 4;
     TIM1->PSC = 4; // debug
     /* CH2 - clear/!MR, CH3 - strobe/STCP */
     TIM1->CCR2 = 1;
-    TIM1->CCR3 = period-1;
     TIM1->RCR = 0;
-    TIM1->BDTR  = TIM_BDTR_MOE | (15<<TIM_BDTR_DTG_Pos);
-    TIM1->CCMR1 = (7<<TIM_CCMR1_OC2M_Pos); // | TIM_CCMR1_OC2PE;
+    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos); // | TIM_CCMR1_OC2PE;
     TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos); // | TIM_CCMR2_OC3PE;
     TIM1->CCER |= TIM_CCER_CC2E | TIM_CCER_CC2NE | TIM_CCER_CC2P | TIM_CCER_CC3E;
 //    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos) | TIM_CCMR1_OC2PE;
 //    TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE;
 //    TIM1->CCER = TIM_CCER_CC2E | TIM_CCER_CC3E;
 //    TIM1->BDTR = TIM_BDTR_MOE;
-//    TIM1->DIER = TIM_DIER_UIE;
+    TIM1->DIER = TIM_DIER_UIE;
 
-//    NVIC_EnableIRQ(TIM1_CC_IRQn);
-//    NVIC_SetPriority(TIM1_CC_IRQn, 2);
+    NVIC_EnableIRQ(TIM1_BRK_UP_TRG_COM_IRQn);
+    NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 2);
+
+    TIM1->EGR |= TIM_EGR_UG;
 
     for (;;) {
         GPIOA->ODR ^= GPIO_ODR_6;
-        TIM1->CNT = period-1;
-        TIM1->ARR = period;
-        TIM1->EGR |= TIM_EGR_UG;
-        TIM1->ARR = 2;
-        TIM1->CR1 |= TIM_CR1_CEN;
-        GPIOA->BSRR = GPIO_BSRR_BR_6 | GPIO_BSRR_BR_4;
         LL_mDelay(1);
-        SPI1->DR = 0x88<<8;
-        while (SPI1->SR & SPI_SR_BSY);
     }
 }
 
@@ -110,29 +103,38 @@ uint8_t brightness_by_bit[NBITS] = {
     0x11, 0x22, 0x44, 0x88
 };
 
-void TIM1_CC_IRQHandler(void) {
-    static uint32_t bitpos = 0;
-    bitpos = (bitpos+1)&(NBITS-1);
+/*
+ * 1.00us
+ * 1.64us
+ * 2.84us
+ * 5.36us
+ * 10.4us
+ * 20.4us
+ * 40.4us
+ * 80.8us
+ */
+void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {
+    static uint32_t idx = 0;
+    idx = (idx+1)&7;
 
-    GPIOA->ODR ^= GPIO_ODR_6 | GPIO_ODR_4;
+    GPIOA->ODR ^= GPIO_ODR_4;
+    TIM1->CCMR1 = (4<<TIM_CCMR1_OC2M_Pos); // | TIM_CCMR1_OC2PE;
 
-//    SPI1->DR = ((uint32_t)brightness_by_bit[bitpos])<<8;
-    SPI1->DR = (bitpos<<8) | (bitpos<<10) | (bitpos<<12) | (bitpos<<14);
+    SPI1->DR = 0x88<<8;
     while (SPI1->SR & SPI_SR_BSY);
 
-    const uint32_t cycles_strobe = 2;
-    const uint32_t cycles_clear = 2;
-    const uint32_t base_val = 16;
-    uint32_t period = base_val<<bitpos;
-
-//    TIM1->ARR = period;
-//    TIM1->ARR = 1024;
-//    TIM1->CCR3 = cycles_strobe; /* strobe */
-//    TIM1->CCR2 = period-cycles_clear; /* clear */
-//    TIM1->EGR |= TIM_EGR_UG;
-//    TIM1->ARR = cycles_strobe+1;
-//    LL_mDelay(1);
-//    TIM1->CR1 |= TIM_CR1_CEN;
+    const uint32_t period_base = 4; /* 1us */
+    const uint32_t period = period_base<<idx;
+//    TIM1->BDTR  = TIM_BDTR_MOE | (16<<TIM_BDTR_DTG_Pos);
+    TIM1->BDTR = TIM_BDTR_MOE | (0<<TIM_BDTR_DTG_Pos);
+    TIM1->CCR3 = period-1;
+    TIM1->CNT = period-1;
+    TIM1->ARR = period;
+    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos); // | TIM_CCMR1_OC2PE;
+    TIM1->EGR |= TIM_EGR_UG;
+    TIM1->ARR = 2;
+    TIM1->CR1 |= TIM_CR1_CEN;
+    TIM1->SR &= ~TIM_SR_UIF_Msk;
 }
 
 void NMI_Handler(void) {
