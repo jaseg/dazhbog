@@ -56,21 +56,19 @@ int main(void) {
     /* Configure TIM1 for display strobe generation */
     /* Configure UART for RS485 comm */
     /* 8N1, 115200Bd */
-    TIM1->CR1 = TIM_CR1_ARPE; //TIM_CR1_OPM | 
+    TIM1->CR1 = TIM_CR1_OPM | TIM_CR1_ARPE | TIM_CR1_URS;
     TIM1->PSC = 256; // debug
-    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos) | TIM_CCMR1_OC2PE | (6<<TIM_CCMR1_OC1M_Pos) | TIM_CCMR1_OC1PE;
+    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos) | TIM_CCMR1_OC2PE;
     TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE;
-    TIM1->CCER = TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E;
+    TIM1->CCER = TIM_CCER_CC2E | TIM_CCER_CC3E;
     TIM1->BDTR = TIM_BDTR_MOE;
     TIM1->RCR = 2;
-    TIM1->CCR1 = 1;
-    TIM1->CCR3 = 2; /* strobe */
-    TIM1->ARR = 16384;
-//    TIM1->DIER = TIM_DIER_CC1IE;
+    TIM1->DIER = TIM_DIER_UIE;
 
-    NVIC_EnableIRQ(TIM1_CC_IRQn);
-    NVIC_SetPriority(TIM1_CC_IRQn, 2);
+    NVIC_EnableIRQ(TIM1_BRK_UP_TRG_COM_IRQn);
+    NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 2);
 
+    TIM1->ARR = 1024;
     TIM1->EGR |= TIM_EGR_UG;
     TIM1->CR1 |= TIM_CR1_CEN;
 
@@ -83,7 +81,7 @@ uint8_t brightness_by_bit[NBITS] = {
     0x11, 0x22, 0x44, 0x88
 };
 
-void TIM1_CC_IRQHandler(void) {
+void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {
     static uint32_t bitpos = 0;
     bitpos = (bitpos+1)&(NBITS-1);
 
@@ -96,12 +94,14 @@ void TIM1_CC_IRQHandler(void) {
     const uint32_t base_val = 16;
     uint32_t period = base_val<<bitpos;
 
-    TIM1->ARR = 128;//period;
-//    TIM1->CCR3 = cycles_strobe; /* strobe */
-//    TIM1->CCR2 = period-cycles_clear; /* clear */
-//    TIM1->EGR |= TIM_EGR_UG;
-    TIM1->CR1 |= TIM_CR1_CEN;
+//    TIM1->ARR = period;
+    TIM1->ARR = 1024;
+    TIM1->CCR3 = cycles_strobe; /* strobe */
+    TIM1->CCR2 = period-cycles_clear; /* clear */
+    TIM1->EGR |= TIM_EGR_UG;
 //    TIM1->ARR = cycles_strobe+1;
+//    LL_mDelay(1);
+//    TIM1->CR1 |= TIM_CR1_CEN;
 //    GPIOA->BSRR = GPIO_BSRR_BR_4 | GPIO_BSRR_BS_6;
 }
 
