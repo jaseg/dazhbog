@@ -215,10 +215,10 @@ Used DCodes :
 *************************************************************
 
 *************************************************************
-Generating : Mechanical 1
-      File : led_drv.GM1
+Generating : Keep-Out Layer
+      File : led_drv.GKO
 
-    Adding Layer      : Mechanical 1
+    Adding Layer      : Keep-Out Layer
 
 
 Used DCodes :
