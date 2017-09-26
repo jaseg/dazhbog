@@ -10,7 +10,7 @@ SIZE    := arm-none-eabi-size
 
 CFLAGS  = -Wall -g -std=gnu11 -Os  
 CFLAGS += -mlittle-endian -mcpu=cortex-m0 -march=armv6-m -mthumb
-CFLAGS += -ffunction-sections -fdata-sections -Wl,--gc-sections 
+#CFLAGS += -ffunction-sections -fdata-sections -Wl,--gc-sections 
 CFLAGS += -Wl,-Map=main.map
 
 # Technically we're using an STM32F030F4, but apart from the TSSOP20 package that one is largely identical to the
@@ -31,7 +31,7 @@ all: main.elf
 cmsis_exports.c: $(CMSIS_DEV_PATH)/Include/stm32f030x6.h $(CMSIS_PATH)/Include/core_cm0.h
 	python3 gen_cmsis_exports.py $^ > $@
 
-main.elf: main.c startup_stm32f030x6.s system_stm32f0xx.c $(HAL_PATH)/Src/stm32f0xx_ll_utils.c
+main.elf: main.c startup_stm32f030x6.s system_stm32f0xx.c $(HAL_PATH)/Src/stm32f0xx_ll_utils.c cmsis_exports.c
 	$(CC) $(CFLAGS) -o $@ $^
 	$(OBJCOPY) -O ihex $@ $(@:.elf=.hex)
 	$(OBJCOPY) -O binary $@ $(@:.elf=.bin)

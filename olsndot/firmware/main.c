@@ -11,7 +11,21 @@
 #define NBITS 12
 void do_transpose(void);
 uint32_t brightness[32];
+uint32_t sys_time = 0;
+uint32_t sys_time_seconds = 0;
 volatile uint32_t brightness_by_bit[NBITS];
+
+unsigned int stk_start(void) {
+    return SysTick->VAL;
+}
+
+unsigned int stk_end(unsigned int start) {
+    return (start - SysTick->VAL) & 0xffffff;
+}
+
+unsigned int stk_microseconds(void) {
+    return sys_time*1000 + (1000 - (SysTick->VAL / (SystemCoreClock/1000000)));
+}
 
 void hsv_set(int idx, int hue, int white) {
     int i = hue>>NBITS;
@@ -67,11 +81,12 @@ int main(void) {
     while (!(RCC->CR&RCC_CR_PLLRDY));
     RCC->CFGR |= (2<<RCC_CFGR_SW_Pos);
     SystemCoreClockUpdate();
-
+    SysTick_Config(SystemCoreClock/1000); /* 1ms interval */
 
 
     RCC->AHBENR  |= RCC_AHBENR_GPIOAEN | RCC_AHBENR_GPIOBEN;
     RCC->APB2ENR |= RCC_APB2ENR_SPI1EN | RCC_APB2ENR_TIM1EN | RCC_APB2ENR_USART1EN | RCC_APB2ENR_ADCEN;
+    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
 
     GPIOA->MODER |=
           (3<<GPIO_MODER_MODER0_Pos)  /* PA0  - Current measurement analog input */
@@ -113,9 +128,8 @@ int main(void) {
     /* CPOL=0, CPHA=0, prescaler=8 -> 1MBd */
     SPI1->CR1 = SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE | (0<<SPI_CR1_BR_Pos) | SPI_CR1_MSTR;
     SPI1->CR2 = (0xf<<SPI_CR2_DS_Pos);
+
     /* Configure TIM1 for display strobe generation */
-    /* Configure UART for RS485 comm */
-    /* 8N1, 115200Bd */
     TIM1->CR1 = TIM_CR1_ARPE; // | TIM_CR1_OPM; // | TIM_CR1_URS;
 
     TIM1->PSC = 1; // debug
@@ -132,6 +146,37 @@ int main(void) {
 
     TIM1->EGR |= TIM_EGR_UG;
 
+    TIM3->CR1 = TIM_CR1_OPM;
+    TIM3->DIER = TIM_DIER_UIE;
+    TIM3->PSC = 31;
+    TIM3->ARR = 1000;
+
+    NVIC_EnableIRQ(TIM3_IRQn);
+    NVIC_SetPriority(TIM3_IRQn, 2);
+
+    TIM3->EGR |= TIM_EGR_UG;
+
+    /* Configure UART for RS485 comm */
+    /* 8N1, 1MBd */
+    USART1->CR1 = /* 8-bit -> M1, M0 clear */
+        /* RTOIE clear */
+          (8 << USART_CR1_DEAT_Pos) /* 8 sample cycles/1 bit DE assertion time */
+        | (8 << USART_CR1_DEDT_Pos) /* 8 sample cycles/1 bit DE assertion time */
+        /* CMIF clear */
+        /* WAKE clear */
+        /* PCE, PS clear */
+        | USART_CR1_RXNEIE
+        /* other interrupts clear */
+        | USART_CR1_TE
+        | USART_CR1_RE;
+    //USART1->CR2 = USART_CR2_RTOEN; /* Timeout enable */
+    USART1->CR3 = USART_CR3_DEM; /* RS485 DE enable (output on RTS) */
+    USART1->BRR = 32;
+    USART1->CR1 |= USART_CR1_UE;
+
+    //NVIC_EnableIRQ(USART1_IRQn);
+    NVIC_SetPriority(USART1_IRQn, 2);
+
     while (42) {
 #define HUE_MAX ((1<<NBITS)*6)
 #define HUE_OFFX 0.15F /* 0-1 */
@@ -144,7 +189,11 @@ int main(void) {
             for (int ch=0; ch<8; ch++) {
                 hue = HUE_MAX * (HUE_OFFX + HUE_AMPLITUDE*sinf(v + ch*CHANNEL_SPACING));
                 hue %= HUE_MAX;
-                hsv_set(ch, hue, WHITE*(1<<NBITS));
+                //hsv_set(ch, hue, WHITE*(1<<NBITS));
+                brightness[ch*4+0] = 128;
+                brightness[ch*4+1] = 0;
+                brightness[ch*4+2] = 128;
+                brightness[ch*4+3] = 0;
             }
             do_transpose();
             for (int k=0; k<10000; k++) {
@@ -160,7 +209,7 @@ volatile uint32_t brightness_by_bit[NBITS] = { 0 };
 void do_transpose(void) {
     for (uint32_t i=0; i<NBITS; i++) {
         uint32_t bv = 0;
-        uint32_t mask = 1<<i;
+        uint32_t mask = 1<<i<<(16-NBITS);
         for (uint32_t j=0; j<32; j++) {
             if (brightness[j] & mask)
             bv |= 1<<j;
@@ -204,6 +253,87 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {
     TIM1->SR &= ~TIM_SR_UIF_Msk;
 }
 
+union packet {
+    struct {
+        uint8_t cmd; /* 0x23 */
+        uint8_t step; /* 0-12, numbered from bottom */
+        union {
+            uint16_t rgbw[4];
+            struct {
+                uint16_t r, g, b, w;
+            };
+        };
+    } set_step;
+    uint8_t data[0];
+};
+
+int rxpos = 0;
+void TIM3_IRQHandler(void) {
+    TIM3->SR &= ~TIM_SR_UIF;
+    /* if (rxpos != sizeof(union packet))
+        asm("bkpt");
+    */
+    rxpos = 0;
+}
+
+#define USART_OFFX 8
+#define NCHANNELS (sizeof(brightness)/sizeof(brightness[0]))
+int last_step = NCHANNELS/4;
+void USART1_IRQHandler() {
+    static union packet rxbuf;
+
+    int isr = USART1->ISR;
+    USART1->RQR |= USART_RQR_RXFRQ;
+    /* Overrun detected? */
+    if (isr & USART_ISR_ORE) {
+        USART1->ICR = USART_ICR_ORECF; /* Acknowledge overrun */
+        //asm("bkpt"); FIXME
+        return;
+    }
+
+    if (!(isr & USART_ISR_RXNE)) {
+        //asm("bkpt"); FIXME
+        return;
+    }
+
+    uint8_t data = USART1->RDR;
+    rxbuf.data[rxpos] = data;
+    rxpos++;
+    
+    if (rxpos == sizeof(union packet)) {
+        if (rxbuf.set_step.cmd == 0x23 &&
+            rxbuf.set_step.step >= USART_OFFX &&
+            rxbuf.set_step.step <  USART_OFFX+NCHANNELS) {
+            if (rxbuf.set_step.step != last_step+1)
+            if (last_step != USART_OFFX+(NCHANNELS/4)-1 && rxbuf.set_step.step != 0) {
+                //asm("bkpt");
+            }
+            last_step = rxbuf.set_step.step;
+
+            /*
+            if (rxbuf.set_step.step == 8 && last_step != 15)
+                asm("bkpt");
+            */
+            
+            uint32_t *out = &brightness[(rxbuf.set_step.step - USART_OFFX)*4];
+            /* (matti) (treppe)
+             *   weiß    blau
+             *   rot     weiß
+             *   grün    rot
+             *   blau    grün
+             */
+            out[1] = rxbuf.set_step.rgbw[0];
+            out[2] = rxbuf.set_step.rgbw[1];
+            out[3] = rxbuf.set_step.rgbw[2];
+            out[0] = rxbuf.set_step.rgbw[3];
+        }
+        rxpos = 0;
+    }
+
+    TIM3->CNT = 0;
+    TIM3->CR1 |= TIM_CR1_CEN;
+}
+
 void NMI_Handler(void) {
 }
 
@@ -219,10 +349,16 @@ void PendSV_Handler(void) {
 }
 
 void SysTick_Handler(void) {
+    static int n = 0;
+    sys_time++;
+    if (n++ == 1000) {
+        n = 0;
+        sys_time_seconds++;
+    }
 }
 
 /* FIXME */
-void _exit(void) {}
+void _exit(int status) { while (23); }
 void *__bss_start__;
 void *__bss_end__;
 
