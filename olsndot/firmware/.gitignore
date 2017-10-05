@@ -1,0 +1,13 @@
+*.elf
+*.o
+*.map
+*.lst
+*.hex
+*.bin
+
+cmsis_exports.c
+sources.c
+sources.tar.xz
+sources.tar.xz.zip
+
+STM32Cube
