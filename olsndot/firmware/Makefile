@@ -31,7 +31,17 @@ all: main.elf
 cmsis_exports.c: $(CMSIS_DEV_PATH)/Include/stm32f030x6.h $(CMSIS_PATH)/Include/core_cm0.h
 	python3 gen_cmsis_exports.py $^ > $@
 
-main.elf: main.c startup_stm32f030x6.s system_stm32f0xx.c $(HAL_PATH)/Src/stm32f0xx_ll_utils.c cmsis_exports.c
+sources.tar.xz: main.c Makefile
+	tar -caf $@ $^
+
+# don't ask...
+sources.tar.xz.zip: sources.tar.xz
+	zip $@ $^
+
+sources.c: sources.tar.xz.zip
+	xxd -i $< | head -n -1 | sed 's/=/__attribute__((section(".source_tarball"))) =/' > $@
+
+main.elf: main.c startup_stm32f030x6.s system_stm32f0xx.c $(HAL_PATH)/Src/stm32f0xx_ll_utils.c cmsis_exports.c sources.o
 	$(CC) $(CFLAGS) -o $@ $^
 	$(OBJCOPY) -O ihex $@ $(@:.elf=.hex)
 	$(OBJCOPY) -O binary $@ $(@:.elf=.bin)
@@ -44,4 +54,5 @@ program: main.elf openocd.cfg
 clean:
 	rm -f *.o
 	rm -f main.elf main.hex main.bin main.map main.lst
+	rm -f sources.tar.xz sources.tar.xz.zip
 
