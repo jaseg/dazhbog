@@ -1,8 +1,0 @@
-Added Component: Designator=TP1(FS-P_6.35)
-Added Component: Designator=TP2(FS-P_6.35)
-Added Pin To Net: NetName=+12V Pin=TP1-1
-Added Pin To Net: NetName=+12V Pin=TP1-1
-Added Pin To Net: NetName=GND Pin=TP2-1
-Added Pin To Net: NetName=GND Pin=TP2-1
-Added Member To Class: ClassName=main Member=Component TP1 +12V
-Added Member To Class: ClassName=main Member=Component TP2 GND
