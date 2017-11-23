@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------------------------------------------------------------------
-NCDrill File Report For: led_drv.PcbDoc   5/16/2017  9:29:07 PM
+NCDrill File Report For: led_drv.PcbDoc   11/22/2017  12:26:01 PM
 ----------------------------------------------------------------------------------------------------------------------------------
 
 Layer Pair : Top Layer to Bottom Layer
@@ -7,12 +7,12 @@ ASCII RoundHoles File : led_drv.TXT
 
 Tool       Hole Size               Hole Tolerance               Hole Type       Hole Count   Plated         Tool Travel
 ----------------------------------------------------------------------------------------------------------------------------------
-T1      12mil (0.305mm)                                           Round             53        PTH        10.20inch (258.96mm)
-T2      16mil (0.406mm)                                           Round             2         PTH        0.26inch (6.61mm)
-T3      24mil (0.61mm)                                            Round             4         PTH        0.93inch (23.70mm)
+T1      12mil (0.305mm)                                           Round             56        PTH        10.60inch (269.26mm)
+T2      16mil (0.406mm)                                           Round             1         PTH        0.00inch (0.00mm)
+T3      24mil (0.61mm)                                            Round             2         PTH        0.12inch (2.93mm)
 T4      32mil (0.8mm)                                             Round             8         PTH        4.02inch (102.00mm)
 T5      39mil (1mm)                                               Round             6         PTH        2.21inch (56.24mm)
-T6      43mil (1.09mm)                                            Round             36        PTH        7.30inch (185.51mm)
+T6      43mil (1.09mm)                                            Round             36        PTH        7.09inch (179.97mm)
 T7      47mil (1.2mm)                                             Round             4         PTH        0.60inch (15.24mm)
 T8      63mil (1.6mm)                                             Round             4         PTH        1.10inch (28.00mm)
 T9      67mil (1.7mm)                                             Round             2         PTH        0.39inch (10.00mm)

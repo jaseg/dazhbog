@@ -1,4 +1,13 @@
 olsndot/PCB_Project/History
+olsndot/PCB_Project/Project Logs for olsndot
+woodcarver/esp_dual/History
+woodcarver/esp_dual/Project Logs for esp_dual
+
+**/__Previews
+
+*.un~
+*.swp
+*~
 
 # Windows image file caches
 Thumbs.db
