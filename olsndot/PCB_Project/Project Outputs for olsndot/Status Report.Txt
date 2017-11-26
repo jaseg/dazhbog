@@ -1,13 +1,12 @@
-Output: Gerber Files
-Type  : Gerber
-From  : Variant [[No Variations]] of Project [olsndot.PrjPcb]
-   Generated File[led_drv.GBO]
-   Generated File[led_drv.RUL]
-   Generated File[led_drv.EXTREP]
-   Generated File[led_drv.REP]
+Output: NC Drill Files
+Type  : NC Drill
+From  : PCB Document [led_drv.PcbDoc]
+   Generated File[led_drv.TXT]
+   Generated File[led_drv.LDP]
+   Generated File[led_drv.DRR]
 
 
-Files Generated   : 4
+Files Generated   : 3
 Documents Printed : 0
 
-Finished Output Generation At 12:45:46 PM On 11/26/2017
+Finished Output Generation At 4:20:33 PM On 11/26/2017
