@@ -1,15 +1,15 @@
 *************************************************************
-FileName = led_drv.GBR
+FileName = test.GBR
 AutoAperture = True
 *************************************************************
-Generating : Bottom Overlay
-      File : led_drv.GBO
+Generating : Top Layer
+      File : test.GTL
 
-    Adding Layer      : Bottom Overlay
+    Adding Layer      : Top Layer
+
+    Adding Layer      : Multi-Layer
 
 
 Used DCodes :
-    D10
-    D11
 *************************************************************
 
