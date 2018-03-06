@@ -53,7 +53,9 @@ void do_transpose(void);
  *                                 |<----------------NBITS---------------->|  |<>|--ignored
  *                                 | (MSB)      brightness data      (LSB) |  |<>|--ignored
  */
-uint32_t brightness[32] = { 0 };
+uint32_t brightness[32] = {
+    0x2222, 0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222
+};
 
 /* Bit-golfed modulation data generated from the above values by the main loop, ready to be sent out to the shift
  * registers.

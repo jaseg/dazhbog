@@ -32,7 +32,7 @@ cmsis_exports.c: $(CMSIS_DEV_PATH)/Include/stm32f030x6.h $(CMSIS_PATH)/Include/c
 	python3 gen_cmsis_exports.py $^ > $@
 
 sources.tar.xz: main.c Makefile
-	tar -caf $@ $^
+	tar -cf $@ $^
 
 # don't ask...
 sources.tar.xz.zip: sources.tar.xz
