@@ -16,7 +16,7 @@ CFLAGS += -Wl,-Map=main.map
 # Technically we're using an STM32F030F4, but apart from the TSSOP20 package that one is largely identical to the
 # STM32F030*6 and there is no separate device header provided for it, so we're faking a *6 device here. This is
 # even documented in stm32f0xx.h. Thanks ST!
-CFLAGS += -DSTM32F030x6 -DHSE_VALUE=16000000
+CFLAGS += -DSTM32F030x6 -DHSE_VALUE=25000000
 
 CFLAGS += -Tstm32_flash.ld
 CFLAGS += -I$(CMSIS_DEV_PATH)/Include -I$(CMSIS_PATH)/Include -I$(HAL_PATH)/Inc -Iconfig

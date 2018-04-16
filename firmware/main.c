@@ -53,8 +53,8 @@ void do_transpose(void);
  *                                 |<----------------NBITS---------------->|  |<>|--ignored
  *                                 | (MSB)      brightness data      (LSB) |  |<>|--ignored
  */
-uint32_t brightness[32] = {
-    0x2222, 0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222,0x2222
+uint32_t brightness[32] =  {
+    0x23
 };
 
 /* Bit-golfed modulation data generated from the above values by the main loop, ready to be sent out to the shift
@@ -67,22 +67,35 @@ uint32_t sys_time = 0;
 uint32_t sys_time_seconds = 0;
 
 int main(void) {
-    /* Get all the good clocks and PLLs on this thing up and running. We're running from an external 16MHz crystal,
-     * which we're first dividing down by 2 to get 8MHz, then PLL'ing up by 4 to get 32MHz as our main system clock.
+    /* Get all the good clocks and PLLs on this thing up and running. We're
+     * running from an external 25MHz crystal,  which we're first dividing
+     * down by 5 to get 5 MHz, then PLL'ing up by 6 to get 30 MHz as our
+     * main system clock.
      *
-     * The busses are all run directly from these 32MHz because why not.
+     * The busses are all run directly from these 30 MHz because why not.
      *
-     * Be careful in mucking around with this code since you can kind of semi-brick the chip if you do it wrong.
+     * Be careful in mucking around with this code since you can kind of
+     * semi-brick the chip if you do it wrong.
      */
     RCC->CR |= RCC_CR_HSEON;
     while (!(RCC->CR&RCC_CR_HSERDY));
+
+    // HSE ready, let's configure the PLL
     RCC->CFGR &= ~RCC_CFGR_PLLMUL_Msk & ~RCC_CFGR_SW_Msk & ~RCC_CFGR_PPRE_Msk & ~RCC_CFGR_HPRE_Msk;
-    RCC->CFGR |= (2<<RCC_CFGR_PLLMUL_Pos) | RCC_CFGR_PLLSRC_HSE_PREDIV; /* PLL x4 -> 32.0MHz */
+
+    // PLLMUL: 6x (0b0100)
+    RCC->CFGR |= (0b0100<<RCC_CFGR_PLLMUL_Pos) | RCC_CFGR_PLLSRC_HSE_PREDIV;
+
+    // PREDIV:
+    // HSE / PREDIV = PLL SRC
     RCC->CFGR2 &= ~RCC_CFGR2_PREDIV_Msk;
-    RCC->CFGR2 |= RCC_CFGR2_PREDIV_DIV2; /* prediv :2 -> 8.0MHz */
+    RCC->CFGR2 |= RCC_CFGR2_PREDIV_DIV5; /* prediv :10 -> 5 MHz */
+
     RCC->CR |= RCC_CR_PLLON;
     while (!(RCC->CR&RCC_CR_PLLRDY));
+
     RCC->CFGR |= (2<<RCC_CFGR_SW_Pos);
+
     SystemCoreClockUpdate();
     SysTick_Config(SystemCoreClock/1000); /* 1ms interval */
 
@@ -129,7 +142,7 @@ int main(void) {
           (2<<GPIO_AFRH_AFRH2_Pos);  /* TIM1_CH3  */
     GPIOB->AFR[0] |=
           (2<<GPIO_AFRL_AFRL1_Pos);  /* TIM1_CH3N */
-    
+
     /* Configure SPI controller */
     /* CPOL=0, CPHA=0, prescaler=2 -> 16MBd */
     SPI1->CR1 = SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE | (0<<SPI_CR1_BR_Pos) | SPI_CR1_MSTR;
@@ -158,7 +171,7 @@ int main(void) {
     /* Configure TIM3 for USART timeout handing */
     TIM3->CR1 = TIM_CR1_OPM;
     TIM3->DIER = TIM_DIER_UIE;
-    TIM3->PSC = 31;
+    TIM3->PSC = 30;
     TIM3->ARR = 1000;
 
     /* Configure Timer 3 update (overrun) interrupt on NVIC.
@@ -183,7 +196,8 @@ int main(void) {
         | USART_CR1_TE
         | USART_CR1_RE;
     USART1->CR3 = USART_CR3_DEM; /* RS485 DE enable (output on RTS) */
-    USART1->BRR = 32;
+    // USART1->BRR = 30;
+    USART1->BRR = 40; // 750000
     USART1->CR1 |= USART_CR1_UE;
 
     /* Configure USART1 interrupt on NVIC. Used only for RX. */
@@ -197,7 +211,6 @@ int main(void) {
 
         /* Bit-mangle the integer brightness data to produce raw modulation data */
         do_transpose();
-        
         /* Wait a moment */
         for (int k=0; k<10000; k++)
             asm volatile("nop");
@@ -224,6 +237,7 @@ void do_transpose(void) {
 /* This value is a constant offset added to every bit period to allow for the timer IRQ handler to execute. This is set
  * empirically using a debugger and a logic analyzer. */
 #define TIMER_CYCLES_FOR_SPI_TRANSMISSIONS 120
+
 /* This is the same as above, but for the reset cycle of the bit period. */
 #define RESET_PERIOD_LENGTH 40
 
@@ -340,8 +354,10 @@ union packet {
 int rxpos = 0;
 void TIM3_IRQHandler(void) {
     TIM3->SR &= ~TIM_SR_UIF;
-    /* if (rxpos != sizeof(union packet))
+    /*
+    if (rxpos != sizeof(union packet)) {
         asm("bkpt");
+    }
     */
     rxpos = 0;
 }
@@ -369,7 +385,7 @@ void TIM3_IRQHandler(void) {
  * (15 - 8) * 4 + {0, 1, 2, 3}
  */
 #ifndef USART_CHANNEL_OFFX
-#define USART_CHANNEL_OFFX 8
+#define USART_CHANNEL_OFFX 0
 #endif//USART_CHANNEL_OFFX
 
 #define NCHANNELS (sizeof(brightness)/sizeof(brightness[0]))
@@ -394,7 +410,7 @@ void USART1_IRQHandler() {
     uint8_t data = USART1->RDR;
     rxbuf.data[rxpos] = data;
     rxpos++;
-    
+
     /* If we finished receiving a packet, deal with it. */
     if (rxpos == sizeof(union packet)) {
         /* Check packet header */
