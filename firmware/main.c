@@ -34,6 +34,10 @@
 #include <stm32f0xx_ll_utils.h>
 #include <math.h>
 
+#include "global.h"
+#include "serial.h"
+#include "adc.h"
+
 /* Bit count of this device. Note that to change this you will also have to adapt the per-bit timer period lookup table
  * below.
  */
@@ -45,18 +49,6 @@
 
 void do_transpose(void);
 
-/* Right-aligned integer raw channel brightness values like so:
- *
- * bit index 31       ...       16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
- *                                 | (MSB)      serial data put *here*     (LSB) |
- *           |<-utterly ignored->| |<-----------------MAX_BITS------------------>|
- *                                 |<----------------NBITS---------------->|  |<>|--ignored
- *                                 | (MSB)      brightness data      (LSB) |  |<>|--ignored
- */
-uint32_t brightness[32] =  {
-    0x23
-};
-
 /* Bit-golfed modulation data generated from the above values by the main loop, ready to be sent out to the shift
  * registers.
  */
@@ -67,15 +59,12 @@ uint32_t sys_time = 0;
 uint32_t sys_time_seconds = 0;
 
 int main(void) {
-    /* Get all the good clocks and PLLs on this thing up and running. We're
-     * running from an external 25MHz crystal,  which we're first dividing
-     * down by 5 to get 5 MHz, then PLL'ing up by 6 to get 30 MHz as our
-     * main system clock.
+    /* Get all the good clocks and PLLs on this thing up and running. We're running from an external 25MHz crystal,
+     * which we're first dividing down by 5 to get 5 MHz, then PLL'ing up by 6 to get 30 MHz as our main system clock.
      *
      * The busses are all run directly from these 30 MHz because why not.
      *
-     * Be careful in mucking around with this code since you can kind of
-     * semi-brick the chip if you do it wrong.
+     * Be careful in mucking around with this code since you can kind of semi-brick the chip if you do it wrong.
      */
     RCC->CR |= RCC_CR_HSEON;
     while (!(RCC->CR&RCC_CR_HSERDY));
@@ -160,8 +149,7 @@ int main(void) {
     TIM1->ARR = 1;
     TIM1->CR1 |= TIM_CR1_CEN;
 
-    /* Configure Timer 1 update (overrun) interrupt on NVIC.
-     * Used only for update (overrun) for strobe timing. */
+    /* Configure Timer 1 update (overrun) interrupt on NVIC.  Used only for update (overrun) for strobe timing. */
     NVIC_EnableIRQ(TIM1_BRK_UP_TRG_COM_IRQn);
     NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 1);
 
@@ -174,8 +162,7 @@ int main(void) {
     TIM3->PSC = 30;
     TIM3->ARR = 1000;
 
-    /* Configure Timer 3 update (overrun) interrupt on NVIC.
-     * Used only for update (overrun) for USART timeout handling. */
+    /* Configure Timer 3 update (overrun) interrupt on NVIC.  Used only for update (overrun) for USART timeout handling. */
     NVIC_EnableIRQ(TIM3_IRQn);
     NVIC_SetPriority(TIM3_IRQn, 2);
 
@@ -204,16 +191,20 @@ int main(void) {
     NVIC_EnableIRQ(USART1_IRQn);
     NVIC_SetPriority(USART1_IRQn, 2);
 
+    adc_init();
+
     /* Idly loop around, occassionally disfiguring some integers. */
     while (42) {
         /* Debug output on LED. */
         GPIOA->ODR ^= GPIO_ODR_6;
 
-        /* Bit-mangle the integer brightness data to produce raw modulation data */
-        do_transpose();
-        /* Wait a moment */
-        for (int k=0; k<10000; k++)
-            asm volatile("nop");
+        if (framebuf_out_of_sync != 0) {
+            /* This logic is very slightly racy, but that should not matter since we're updating the frame buffer often
+             * enough so you don't notice one miss every billion frames. */
+            framebuf_out_of_sync = 0;
+            /* Bit-mangle the integer framebuf data to produce raw modulation data */
+            do_transpose();
+        }
     }
 }
 
@@ -224,7 +215,7 @@ void do_transpose(void) {
         uint32_t mask = 1<<i<<(MAX_BITS-NBITS); /* Bit mask for this bit value. */
         uint32_t bv = 0; /* accumulator thing */
         for (uint32_t j=0; j<32; j++) {
-            if (brightness[j] & mask)
+            if (rx_buf.set_fb_rq.framebuf[j] & mask)
             bv |= 1<<j;
         }
         brightness_by_bit[i] = bv;
@@ -299,9 +290,9 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {
         uint32_t val = brightness_by_bit[idx];
 
         /* Shift out the current period's data. The shift register clear and strobe lines are handled by the timers
-         * capture/compare channel 3 complementary outputs. The dead-time generator is used to sequence the clear and strobe
-         * edges one after another. Since there may be small variations in IRQ service latency it is critical to allow for
-         * some leeway between the end of this data transmission and strobe and clear. */
+         * capture/compare channel 3 complementary outputs. The dead-time generator is used to sequence the clear and
+         * strobe edges one after another. Since there may be small variations in IRQ service latency it is critical to
+         * allow for some leeway between the end of this data transmission and strobe and clear. */
         SPI1->DR = (val&0xffff);
         while (SPI1->SR & SPI_SR_BSY);
         SPI1->DR = (val>>16);
@@ -360,88 +351,6 @@ void TIM3_IRQHandler(void) {
     }
     */
     rxpos = 0;
-}
-
-/* This macro defines the lowest channel number of this board on the serial command bus. On a shared bus with several
- * boards, you would generally assign increasing USART_CHANNEL_OFFX values to each one (0, 8, 16, 24, ...).
- *
- * Example: Let USART_CHANNEL_OFFX be 8.
- *
- *  /--Command channel number received in command packet (packet.set_step.step)
- *  |    /--USART_OFFX
- *  |    |    /--4 raw channels per logical channel (step): R, G, B, W
- *  |    |    |         /--Raw channel offset for R, G, B, W
- *  |    |    |         |             /--Resulting raw channels for R, G, B, W data received in command packet
- *  |    |    |         |             |
- *  v    v    v         v             v
- *
- * (8  - 8) * 4 + {0, 1, 2, 3} = {0, 1, 2, 3}
- * (9  - 8) * 4 + {0, 1, 2, 3}
- * (10 - 8) * 4 + {0, 1, 2, 3}
- * (11 - 8) * 4 + {0, 1, 2, 3}
- * (12 - 8) * 4 + {0, 1, 2, 3}
- * (13 - 8) * 4 + {0, 1, 2, 3}
- * (14 - 8) * 4 + {0, 1, 2, 3}
- * (15 - 8) * 4 + {0, 1, 2, 3}
- */
-#ifndef USART_CHANNEL_OFFX
-#define USART_CHANNEL_OFFX 0
-#endif//USART_CHANNEL_OFFX
-
-#define NCHANNELS (sizeof(brightness)/sizeof(brightness[0]))
-void USART1_IRQHandler() {
-    static union packet rxbuf;
-
-    int isr = USART1->ISR;
-    USART1->RQR |= USART_RQR_RXFRQ;
-    /* Overrun detected? */
-    if (isr & USART_ISR_ORE) {
-        USART1->ICR = USART_ICR_ORECF; /* Acknowledge overrun */
-        //asm("bkpt"); /* uncomment for debug */
-        return;
-    }
-
-    if (!(isr & USART_ISR_RXNE)) {
-        //asm("bkpt"); /* uncomment for debug */
-        return;
-    }
-
-    /* Store received data */
-    uint8_t data = USART1->RDR;
-    rxbuf.data[rxpos] = data;
-    rxpos++;
-
-    /* If we finished receiving a packet, deal with it. */
-    if (rxpos == sizeof(union packet)) {
-        /* Check packet header */
-        if (rxbuf.set_step.cmd == 0x23 &&
-            /* bounds-check received channel number. This allows several driver boards to share one common serial bus */
-            rxbuf.set_step.step >= USART_CHANNEL_OFFX &&
-            rxbuf.set_step.step <  USART_CHANNEL_OFFX+NCHANNELS) {
-
-            /* Calculate raw channel brightness value base address for logical channel */
-            uint32_t *out = &brightness[(rxbuf.set_step.step - USART_CHANNEL_OFFX)*4];
-
-            /* Correct RGBW raw channel ordering per logical channel according to SUB-D pinout used.
-             *
-             * (matti) (treppe)
-             *   weiß    blau
-             *   rot     weiß
-             *   grün    rot
-             *   blau    grün
-             */
-            out[1] = rxbuf.set_step.rgbw[0];
-            out[2] = rxbuf.set_step.rgbw[1];
-            out[3] = rxbuf.set_step.rgbw[2];
-            out[0] = rxbuf.set_step.rgbw[3];
-        }
-        /* Reset receive data counter */
-        rxpos = 0;
-    }
-
-    /* Reset usart timeout handler */
-    TIM3->CNT = 0;
-    TIM3->CR1 |= TIM_CR1_CEN;
 }
 
 /* Misc IRQ handlers */
