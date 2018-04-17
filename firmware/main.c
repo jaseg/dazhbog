@@ -163,7 +163,7 @@ int main(void) {
     /* Configure Timer 1 update (overrun) interrupt on NVIC.
      * Used only for update (overrun) for strobe timing. */
     NVIC_EnableIRQ(TIM1_BRK_UP_TRG_COM_IRQn);
-    NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 2);
+    NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 1);
 
     /* Pre-load initial values, kick of first interrupt */
     TIM1->EGR |= TIM_EGR_UG;
