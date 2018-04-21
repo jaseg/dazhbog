@@ -23,7 +23,6 @@
 
 #include "serial.h"
 #include "adc.h"
-#include "mac.h"
 
 unsigned int uart_overruns = 0;
 unsigned int frame_overruns = 0;
@@ -47,13 +46,17 @@ void send_frame_formatted(uint8_t *buf, int len) {
         while (*p && p!=end)
             tx_char(*p++);
         p++, q++;
-    } while (p < end);
+    } while (p <= end);
     tx_char('\0');
 }
 
 void send_status_reply(void) {
     tx_buf.desc_reply.firmware_version = FIRMWARE_VERSION;
     tx_buf.desc_reply.hardware_version = HARDWARE_VERSION;
+    tx_buf.desc_reply.nbits = NBITS;
+    tx_buf.desc_reply.channel_spec = CHANNEL_SPEC;
+    tx_buf.desc_reply.nchannels = NCHANNELS;
+    tx_buf.desc_reply.color_spec = COLOR_SPEC;
     tx_buf.desc_reply.uptime_s = sys_time_seconds;
     tx_buf.desc_reply.vcc_mv = adc_vcc_mv;
     tx_buf.desc_reply.temp_celsius = adc_temp_celsius;
@@ -66,16 +69,18 @@ void send_status_reply(void) {
 /* This is the higher-level protocol handler for the serial protocol. It gets passed the number of data bytes in this
  * frame (which may be zero) and returns a pointer to the buffer where the next frame should be stored.
  */
-volatile uint8_t *packet_received(int len) {
+static volatile inline void packet_received(int len) {
     static enum {
         PROT_ADDRESSED = 0,
         PROT_EXPECT_FRAME_SECOND_HALF = 1,
         PROT_IGNORE = 2,
     } protocol_state = PROT_IGNORE; 
     /* Use mac frames as delimiters to synchronize this protocol layer */
-    if (len == 0) { /* Discovery packet */
+    if (len == 1 && rx_buf.byte_data[0] == 0x00) { /* Discovery packet */
         if (sys_time < 100 && sys_time_seconds == 0) { /* Only respond during the first 100ms after boot */
-            send_frame_formatted((uint8_t*)&device_mac, sizeof(device_mac));
+            tx_buf.device_type_reply.mac = MAC_ADDR;
+            tx_buf.device_type_reply.device_type = DEVICE_TYPE;
+            send_frame_formatted(tx_buf.byte_data, sizeof(tx_buf.device_type_reply));
         }
 
     } else if (len == 1) { /* Command packet */
@@ -91,13 +96,13 @@ volatile uint8_t *packet_received(int len) {
         protocol_state = PROT_IGNORE;
 
     } else if (len == 4) { /* Address packet */
-        if (rx_buf.mac_data == device_mac) { /* we are addressed */
+        if (rx_buf.mac_data == MAC_ADDR) { /* we are addressed */
             protocol_state = PROT_ADDRESSED; /* start listening for frame buffer data */
         } else { /* we are not addressed */
             protocol_state = PROT_IGNORE; /* ignore packet */
         }
 
-    } else if (len == sizeof(rx_buf.set_fb_rq.framebuf)) {
+    } else if (len == sizeof(rx_buf.set_fb_rq)) {
         if (protocol_state == PROT_ADDRESSED) { /* First of two half-framebuffer data frames */
             /* Kick off buffer transfer. This triggers the main loop to copy data out of the receive buffer and paste it
              * properly formatted into the frame buffer. */
@@ -117,11 +122,6 @@ volatile uint8_t *packet_received(int len) {
         invalid_frames++;
         protocol_state = PROT_IGNORE; /* go into "hang mode" until next zero-length packet */
     }
-
-    /* By default, return rx_buf.byte_data . This means if an invalid protocol state is reached ("hang mode"), the next
-     * frame is still written to rx_buf. This is not a problem since whatever garbage is written at that point will be
-     * overwritten before the next buffer transfer. */
-    return rx_buf.byte_data;
 }
 
 void USART1_IRQHandler(void) {
@@ -157,9 +157,6 @@ void USART1_IRQHandler(void) {
      *     http://www.stuartcheshire.org/papers/COBSforToN.pdf
      */
 
-    /* This pointer stores where we write data. The higher-level protocol logic decides on a frame-by-frame-basis where
-     * the next frame's data will be stored. */
-    static volatile uint8_t *writep = rx_buf.byte_data;
     /* Index inside the current frame payload */
     static int rxpos = 0;
     /* COBS state machine. This implementation might be a little too complicated, but it works well enough and I find it
@@ -184,8 +181,9 @@ void USART1_IRQHandler(void) {
         uint8_t data = USART1->RDR; /* This automatically acknowledges the IRQ */
 
         if (data == 0x00) { /* End-of-packet */
-            /* Process higher protocol layers on this packet. */
-            writep = packet_received(rxpos);
+            if (cobs_state != COBS_WAIT_SYNC) /* Has a packet been received? */
+                /* Process higher protocol layers on this packet. */
+                packet_received(rxpos);
 
             /* Reset for next packet. */
             cobs_state = COBS_WAIT_START;
@@ -206,7 +204,7 @@ void USART1_IRQHandler(void) {
                 }
 
                 /* Write processed payload byte to current receive buffer */
-                writep[rxpos++] = data;
+                rx_buf.byte_data[rxpos++] = data;
             }
         }
     }

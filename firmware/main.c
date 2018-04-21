@@ -38,15 +38,6 @@
 #include "serial.h"
 #include "adc.h"
 
-/* Bit count of this device. Note that to change this you will also have to adapt the per-bit timer period lookup table
- * below.
- */
-#define NBITS 14
-
-/* Maximum bit count supported by serial command protocol. The brightness data is assumed to be of this bit width, but
- * only the uppermost NBITS bits are used. */
-#define MAX_BITS 16
-
 void do_transpose(void);
 
 /* Bit-golfed modulation data generated from the above values by the main loop, ready to be sent out to the shift
@@ -58,169 +49,11 @@ volatile uint32_t brightness_by_bit[NBITS] = { 0 };
 uint32_t sys_time = 0;
 uint32_t sys_time_seconds = 0;
 
-int main(void) {
-    /* Get all the good clocks and PLLs on this thing up and running. We're running from an external 25MHz crystal,
-     * which we're first dividing down by 5 to get 5 MHz, then PLL'ing up by 6 to get 30 MHz as our main system clock.
-     *
-     * The busses are all run directly from these 30 MHz because why not.
-     *
-     * Be careful in mucking around with this code since you can kind of semi-brick the chip if you do it wrong.
-     */
-    RCC->CR |= RCC_CR_HSEON;
-    while (!(RCC->CR&RCC_CR_HSERDY));
-
-    // HSE ready, let's configure the PLL
-    RCC->CFGR &= ~RCC_CFGR_PLLMUL_Msk & ~RCC_CFGR_SW_Msk & ~RCC_CFGR_PPRE_Msk & ~RCC_CFGR_HPRE_Msk;
-
-    // PLLMUL: 6x (0b0100)
-    RCC->CFGR |= (0b0100<<RCC_CFGR_PLLMUL_Pos) | RCC_CFGR_PLLSRC_HSE_PREDIV;
-
-    // PREDIV:
-    // HSE / PREDIV = PLL SRC
-    RCC->CFGR2 &= ~RCC_CFGR2_PREDIV_Msk;
-    RCC->CFGR2 |= RCC_CFGR2_PREDIV_DIV5; /* prediv :10 -> 5 MHz */
-
-    RCC->CR |= RCC_CR_PLLON;
-    while (!(RCC->CR&RCC_CR_PLLRDY));
-
-    RCC->CFGR |= (2<<RCC_CFGR_SW_Pos);
-
-    SystemCoreClockUpdate();
-    SysTick_Config(SystemCoreClock/1000); /* 1ms interval */
-
-
-    /* Enable all the periphery we need */
-    RCC->AHBENR  |= RCC_AHBENR_GPIOAEN | RCC_AHBENR_GPIOBEN;
-    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN | RCC_APB2ENR_TIM1EN | RCC_APB2ENR_USART1EN | RCC_APB2ENR_ADCEN;
-    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
-
-    /* Configure all the GPIOs */
-    GPIOA->MODER |=
-          (3<<GPIO_MODER_MODER0_Pos)  /* PA0  - Current measurement analog input */
-        | (1<<GPIO_MODER_MODER1_Pos)  /* PA1  - RS485 TX enable */
-        | (2<<GPIO_MODER_MODER2_Pos)  /* PA2  - RS485 TX */
-        | (2<<GPIO_MODER_MODER3_Pos)  /* PA3  - RS485 RX */
-        /* PA4 reserved because */
-        | (2<<GPIO_MODER_MODER5_Pos)  /* PA5  - Shift register clk/SCLK */
-        | (1<<GPIO_MODER_MODER6_Pos)  /* PA6  - LED2 open-drain output */
-        | (2<<GPIO_MODER_MODER7_Pos)  /* PA7  - Shift register data/MOSI */
-        | (2<<GPIO_MODER_MODER9_Pos)  /* FIXME PA9  - Shift register clear (TIM1_CH2) */
-        | (2<<GPIO_MODER_MODER10_Pos);/* PA10 - Shift register strobe (TIM1_CH3) */
-    GPIOB->MODER |=
-          (2<<GPIO_MODER_MODER1_Pos); /* PB1  - Shift register clear (TIM1_CH3N) */
-
-
-    GPIOA->OTYPER |= GPIO_OTYPER_OT_6; /* LED outputs -> open drain */
-
-    /* Set shift register IO GPIO output speed */
-    GPIOA->OSPEEDR |=
-          (3<<GPIO_OSPEEDR_OSPEEDR5_Pos)  /* SCLK   */
-        | (3<<GPIO_OSPEEDR_OSPEEDR6_Pos)  /* LED1   */
-        | (3<<GPIO_OSPEEDR_OSPEEDR7_Pos)  /* MOSI   */
-        | (3<<GPIO_OSPEEDR_OSPEEDR10_Pos);/* Strobe */
-    GPIOB->OSPEEDR |=
-          (3<<GPIO_OSPEEDR_OSPEEDR1_Pos); /* Clear  */
-
-    /* Alternate function settings */
-    GPIOA->AFR[0] |=
-          (1<<GPIO_AFRL_AFRL2_Pos)   /* USART1_TX */
-        | (1<<GPIO_AFRL_AFRL3_Pos)   /* USART1_RX */
-        | (0<<GPIO_AFRL_AFRL5_Pos)   /* SPI1_SCK  */
-        | (0<<GPIO_AFRL_AFRL7_Pos);  /* SPI1_MOSI */
-    GPIOA->AFR[1] |=
-          (2<<GPIO_AFRH_AFRH2_Pos);  /* TIM1_CH3  */
-    GPIOB->AFR[0] |=
-          (2<<GPIO_AFRL_AFRL1_Pos);  /* TIM1_CH3N */
-
-    /* Configure SPI controller */
-    /* CPOL=0, CPHA=0, prescaler=2 -> 16MBd */
-    SPI1->CR1 = SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE | (0<<SPI_CR1_BR_Pos) | SPI_CR1_MSTR;
-    SPI1->CR2 = (0xf<<SPI_CR2_DS_Pos);
-
-    /* Configure TIM1 for display strobe generation */
-    TIM1->CR1 = TIM_CR1_ARPE;
-
-    TIM1->PSC = 1; /* Prescale by 2, resulting in a 16MHz timer frequency and 62.5ns timer step size. */
-    /* CH2 - clear/!MR, CH3 - strobe/STCP */
-    TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE;
-    TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC3NE | TIM_CCER_CC3P | TIM_CCER_CC3NP;
-    TIM1->BDTR = TIM_BDTR_MOE | (1<<TIM_BDTR_DTG_Pos); /* really short dead time */
-    TIM1->DIER = TIM_DIER_UIE; /* Enable update (overrun) interrupt */
-    TIM1->ARR = 1;
-    TIM1->CR1 |= TIM_CR1_CEN;
-
-    /* Configure Timer 1 update (overrun) interrupt on NVIC.  Used only for update (overrun) for strobe timing. */
-    NVIC_EnableIRQ(TIM1_BRK_UP_TRG_COM_IRQn);
-    NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 1);
-
-    /* Pre-load initial values, kick of first interrupt */
-    TIM1->EGR |= TIM_EGR_UG;
-
-    /* Configure TIM3 for USART timeout handing */
-    TIM3->CR1 = TIM_CR1_OPM;
-    TIM3->DIER = TIM_DIER_UIE;
-    TIM3->PSC = 30;
-    TIM3->ARR = 1000;
-
-    /* Configure Timer 3 update (overrun) interrupt on NVIC.  Used only for update (overrun) for USART timeout handling. */
-    NVIC_EnableIRQ(TIM3_IRQn);
-    NVIC_SetPriority(TIM3_IRQn, 2);
-
-    /* Pre-load initial values */
-    TIM3->EGR |= TIM_EGR_UG;
-
-    /* Configure UART for RS485 comm */
-    /* 8N1, 1MBd */
-    USART1->CR1 = /* 8-bit -> M1, M0 clear */
-        /* RTOIE clear */
-          (8 << USART_CR1_DEAT_Pos) /* 8 sample cycles/1 bit DE assertion time */
-        | (8 << USART_CR1_DEDT_Pos) /* 8 sample cycles/1 bit DE assertion time */
-        /* CMIF clear */
-        /* WAKE clear */
-        /* PCE, PS clear */
-        | USART_CR1_RXNEIE
-        /* other interrupts clear */
-        | USART_CR1_TE
-        | USART_CR1_RE;
-    USART1->CR3 = USART_CR3_DEM; /* RS485 DE enable (output on RTS) */
-    // USART1->BRR = 30;
-    USART1->BRR = 40; // 750000
-    USART1->CR1 |= USART_CR1_UE;
-
-    /* Configure USART1 interrupt on NVIC. Used only for RX. */
-    NVIC_EnableIRQ(USART1_IRQn);
-    NVIC_SetPriority(USART1_IRQn, 2);
-
-    adc_init();
-
-    /* Idly loop around, occassionally disfiguring some integers. */
-    while (42) {
-        /* Debug output on LED. */
-        GPIOA->ODR ^= GPIO_ODR_6;
-
-        if (framebuf_out_of_sync != 0) {
-            /* This logic is very slightly racy, but that should not matter since we're updating the frame buffer often
-             * enough so you don't notice one miss every billion frames. */
-            framebuf_out_of_sync = 0;
-            /* Bit-mangle the integer framebuf data to produce raw modulation data */
-            do_transpose();
-        }
-    }
-}
-
-/* Modulation data bit golfing routine */
-void do_transpose(void) {
-    /* For each bit value */
-    for (uint32_t i=0; i<NBITS; i++) {
-        uint32_t mask = 1<<i<<(MAX_BITS-NBITS); /* Bit mask for this bit value. */
-        uint32_t bv = 0; /* accumulator thing */
-        for (uint32_t j=0; j<32; j++) {
-            if (rx_buf.set_fb_rq.framebuf[j] & mask)
-            bv |= 1<<j;
-        }
-        brightness_by_bit[i] = bv;
-    }
-}
+/* This value sets how long a batch of ADC conversions used for temperature measurement is started before the end of the
+ * longest cycle. Here too the above caveats apply.
+ *
+ * This value is in TIM1/TIM3 timer counts. */
+#define ADC_PRETRIGGER 150 /* trigger with about 12us margin to TIM1 CC IRQ */
 
 /* Bit timing base value. This is the lowes bit interval used */
 #define PERIOD_BASE 4
@@ -265,6 +98,173 @@ static uint16_t timer_period_lookup[NBITS] = {
 #undef A
 #undef B
 #undef C
+
+int main(void) {
+    /* Get all the good clocks and PLLs on this thing up and running. We're running from an external 25MHz crystal,
+     * which we're first dividing down by 5 to get 5 MHz, then PLL'ing up by 6 to get 30 MHz as our main system clock.
+     *
+     * The busses are all run directly from these 30 MHz because why not.
+     *
+     * Be careful in mucking around with this code since you can kind of semi-brick the chip if you do it wrong.
+     */
+    RCC->CR |= RCC_CR_HSEON;
+    while (!(RCC->CR&RCC_CR_HSERDY));
+
+    // HSE ready, let's configure the PLL
+    RCC->CFGR &= ~RCC_CFGR_PLLMUL_Msk & ~RCC_CFGR_SW_Msk & ~RCC_CFGR_PPRE_Msk & ~RCC_CFGR_HPRE_Msk;
+
+    // PLLMUL: 6x (0b0100)
+    RCC->CFGR |= (0b0100<<RCC_CFGR_PLLMUL_Pos) | RCC_CFGR_PLLSRC_HSE_PREDIV;
+
+    // PREDIV:
+    // HSE / PREDIV = PLL SRC
+    RCC->CFGR2 &= ~RCC_CFGR2_PREDIV_Msk;
+    RCC->CFGR2 |= RCC_CFGR2_PREDIV_DIV5; /* prediv :10 -> 5 MHz */
+
+    RCC->CR |= RCC_CR_PLLON;
+    while (!(RCC->CR&RCC_CR_PLLRDY));
+
+    RCC->CFGR |= (2<<RCC_CFGR_SW_Pos);
+
+    SystemCoreClockUpdate();
+    SysTick_Config(SystemCoreClock/1000); /* 1ms interval */
+
+
+    /* Enable all the periphery we need */
+    RCC->AHBENR  |= RCC_AHBENR_GPIOAEN | RCC_AHBENR_GPIOBEN | RCC_AHBENR_DMAEN;
+    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN | RCC_APB2ENR_TIM1EN | RCC_APB2ENR_USART1EN | RCC_APB2ENR_ADCEN;
+    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+
+    /* Configure all the GPIOs */
+    GPIOA->MODER |=
+          (3<<GPIO_MODER_MODER0_Pos)  /* PA0  - Current measurement analog input */
+        | (2<<GPIO_MODER_MODER1_Pos)  /* PA1  - RS485 TX enable */
+        | (2<<GPIO_MODER_MODER2_Pos)  /* PA2  - RS485 TX */
+        | (2<<GPIO_MODER_MODER3_Pos)  /* PA3  - RS485 RX */
+        /* PA4 reserved because */
+        | (2<<GPIO_MODER_MODER5_Pos)  /* PA5  - Shift register clk/SCLK */
+        | (1<<GPIO_MODER_MODER6_Pos)  /* PA6  - LED2 open-drain output */
+        | (2<<GPIO_MODER_MODER7_Pos)  /* PA7  - Shift register data/MOSI */
+        | (2<<GPIO_MODER_MODER9_Pos)  /* FIXME PA9  - Shift register clear (TIM1_CH2) */
+        | (2<<GPIO_MODER_MODER10_Pos);/* PA10 - Shift register strobe (TIM1_CH3) */
+    GPIOB->MODER |=
+          (2<<GPIO_MODER_MODER1_Pos); /* PB1  - Shift register clear (TIM1_CH3N) */
+
+
+    GPIOA->OTYPER |= GPIO_OTYPER_OT_6; /* LED outputs -> open drain */
+
+    /* Set shift register IO GPIO output speed */
+    GPIOA->OSPEEDR |=
+          (3<<GPIO_OSPEEDR_OSPEEDR5_Pos)  /* SCLK   */
+        | (3<<GPIO_OSPEEDR_OSPEEDR6_Pos)  /* LED1   */
+        | (3<<GPIO_OSPEEDR_OSPEEDR7_Pos)  /* MOSI   */
+        | (3<<GPIO_OSPEEDR_OSPEEDR10_Pos);/* Strobe */
+    GPIOB->OSPEEDR |=
+          (3<<GPIO_OSPEEDR_OSPEEDR1_Pos); /* Clear  */
+
+    /* Alternate function settings */
+    GPIOA->AFR[0] |=
+          (1<<GPIO_AFRL_AFRL1_Pos)   /* USART1_RTS (RS485 DE) */
+        | (1<<GPIO_AFRL_AFRL2_Pos)   /* USART1_TX */
+        | (1<<GPIO_AFRL_AFRL3_Pos)   /* USART1_RX */
+        | (0<<GPIO_AFRL_AFRL5_Pos)   /* SPI1_SCK  */
+        | (0<<GPIO_AFRL_AFRL7_Pos);  /* SPI1_MOSI */
+    GPIOA->AFR[1] |=
+          (2<<GPIO_AFRH_AFRH2_Pos);  /* TIM1_CH3  */
+    GPIOB->AFR[0] |=
+          (2<<GPIO_AFRL_AFRL1_Pos);  /* TIM1_CH3N */
+
+    /* Configure SPI controller */
+    /* CPOL=0, CPHA=0, prescaler=2 -> 16MBd */
+    SPI1->CR1 = SPI_CR1_BIDIMODE | SPI_CR1_BIDIOE | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE | (0<<SPI_CR1_BR_Pos) | SPI_CR1_MSTR;
+    SPI1->CR2 = (0xf<<SPI_CR2_DS_Pos);
+
+    /* Configure TIM1 for display strobe generation */
+    TIM1->CR1 = TIM_CR1_ARPE;
+
+    TIM1->PSC = 1; /* Prescale by 2, resulting in a 16MHz timer frequency and 62.5ns timer step size. */
+    /* CH2 - clear/!MR, CH3 - strobe/STCP */
+    TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE | (6<<TIM_CCMR2_OC4M_Pos);
+    TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC3NE | TIM_CCER_CC3P | TIM_CCER_CC3NP | TIM_CCER_CC4E;
+    TIM1->BDTR = TIM_BDTR_MOE | (1<<TIM_BDTR_DTG_Pos); /* really short dead time */
+    TIM1->DIER = TIM_DIER_UIE; /* Enable update (overrun) interrupt */
+    TIM1->ARR = 1;
+    TIM1->CR1 |= TIM_CR1_CEN;
+    /* Trigger at the end of the longest bit cycle. This means this does not trigger in shorter bit cycles. */
+    TIM1->CCR4  = timer_period_lookup[NBITS-1] - ADC_PRETRIGGER;
+
+    /* Configure Timer 1 update (overrun) interrupt on NVIC.  Used only for update (overrun) for strobe timing. */
+    NVIC_EnableIRQ(TIM1_BRK_UP_TRG_COM_IRQn);
+    NVIC_SetPriority(TIM1_BRK_UP_TRG_COM_IRQn, 1);
+
+    /* Pre-load initial values, kick of first interrupt */
+    TIM1->EGR |= TIM_EGR_UG;
+
+    /* Configure TIM3 for USART timeout handing */
+    TIM3->CR1 = TIM_CR1_OPM;
+    TIM3->DIER = TIM_DIER_UIE;
+    TIM3->PSC = 30;
+    TIM3->ARR = 1000;
+
+    /* Configure Timer 3 update (overrun) interrupt on NVIC.  Used only for update (overrun) for USART timeout handling. */
+    NVIC_EnableIRQ(TIM3_IRQn);
+    NVIC_SetPriority(TIM3_IRQn, 2);
+
+    /* Pre-load initial values */
+    TIM3->EGR |= TIM_EGR_UG;
+
+    /* Configure UART for RS485 comm */
+    /* 8N1, 1MBd */
+    USART1->CR1 = /* 8-bit -> M1, M0 clear */
+        /* RTOIE clear */
+          (8 << USART_CR1_DEAT_Pos) /* 8 sample cycles/1 bit DE assertion time */
+        | (8 << USART_CR1_DEDT_Pos) /* 8 sample cycles/1 bit DE assertion time */
+        /* CMIF clear */
+        /* WAKE clear */
+        /* PCE, PS clear */
+        | USART_CR1_RXNEIE
+        /* other interrupts clear */
+        | USART_CR1_TE
+        | USART_CR1_RE;
+    USART1->CR3 = USART_CR3_DEM; /* RS485 DE enable (output on RTS) */
+    // USART1->BRR = 30;
+    //USART1->BRR = 40; // 750000
+    USART1->BRR = 60; // 500000
+    USART1->CR1 |= USART_CR1_UE;
+
+    /* Configure USART1 interrupt on NVIC. Used only for RX. */
+    NVIC_EnableIRQ(USART1_IRQn);
+    NVIC_SetPriority(USART1_IRQn, 2);
+
+    adc_init();
+
+    /* Idly loop around, occassionally disfiguring some integers. */
+    while (42) {
+        /* Debug output on LED. */
+        GPIOA->ODR ^= GPIO_ODR_6;
+
+        if (framebuf_out_of_sync != 0) {
+            /* This logic is very slightly racy, but that should not matter since we're updating the frame buffer often
+             * enough so you don't notice one miss every billion frames. */
+            framebuf_out_of_sync = 0;
+            /* Bit-mangle the integer framebuf data to produce raw modulation data */
+            do_transpose();
+        }
+    }
+}
+
+/* Modulation data bit golfing routine */
+void do_transpose(void) {
+    /* For each bit value */
+    for (uint32_t i=0; i<NBITS; i++) {
+        uint32_t mask = 1<<i<<(MAX_BITS-NBITS); /* Bit mask for this bit value. */
+        uint32_t bv = 0; /* accumulator thing */
+        for (uint32_t j=0; j<32; j++)
+            if (rx_buf.set_fb_rq.framebuf[j] & mask)
+                bv |= 1<<j;
+        brightness_by_bit[i] = bv;
+    }
+}
 
 /* Timer 1 main IRQ handler. This is used only for overflow ("update" or UP event in ST's terminology). */
 void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {

@@ -10,9 +10,10 @@ OBJCOPY := arm-none-eabi-objcopy
 OBJDUMP := arm-none-eabi-objdump
 SIZE    := arm-none-eabi-size
 
-CFLAGS  = -Wall -Wpedantic -Wstrict-aliasing -g -std=gnu11 -Os  
+#CFLAGS  = -Wall -Wpedantic -Wstrict-aliasing -g -std=gnu11 -Os  
+CFLAGS  = -Wall -Wpedantic -Wstrict-aliasing -g -std=gnu11 -O1
 CFLAGS += -mlittle-endian -mcpu=cortex-m0 -march=armv6-m -mthumb
-#CFLAGS += -ffunction-sections -fdata-sections -Wl,--gc-sections 
+CFLAGS += -ffunction-sections -fdata-sections -Wl,--gc-sections 
 CFLAGS += -Wl,-Map=main.map
 
 # Technically we're using an STM32F030F4, but apart from the TSSOP20 package that one is largely identical to the
@@ -43,7 +44,7 @@ sources.tar.xz.zip: sources.tar.xz
 sources.c: sources.tar.xz.zip
 	xxd -i $< | head -n -1 | sed 's/=/__attribute__((section(".source_tarball"))) =/' > $@
 
-main.elf: main.c mac.c adc.c serial.c startup_stm32f030x6.s system_stm32f0xx.c $(HAL_PATH)/Src/stm32f0xx_ll_utils.c cmsis_exports.c
+main.elf: main.c adc.c serial.c startup_stm32f030x6.s system_stm32f0xx.c $(HAL_PATH)/Src/stm32f0xx_ll_utils.c cmsis_exports.c sources.c
 	$(CC) $(CFLAGS) -o $@ $^
 	$(OBJCOPY) -O ihex $@ $(@:.elf=.hex)
 	$(OBJCOPY) -O binary $@ $(@:.elf=.bin)

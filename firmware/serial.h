@@ -27,7 +27,6 @@ void send_status_reply(void);
 /* Internal low-level stuff */
 void tx_char(uint8_t c);
 void send_frame_formatted(uint8_t *buf, int len);
-volatile uint8_t *packet_received(int len);
 
 /* Error counters for debugging */
 extern unsigned int uart_overruns;
@@ -38,6 +37,10 @@ union tx_buf_union {
     struct __attribute__((packed)) {
         uint8_t  firmware_version,
                  hardware_version;
+        uint8_t  nbits;
+        uint8_t  channel_spec;
+        uint8_t color_spec;
+        uint16_t nchannels;
         uint32_t uptime_s,
                  uart_overruns,
                  frame_overruns,
@@ -45,6 +48,10 @@ union tx_buf_union {
          int16_t vcc_mv,
                  temp_celsius;
     } desc_reply;
+    struct __attribute__((packed)) {
+        uint32_t mac;
+        uint16_t  device_type;
+    } device_type_reply;
     uint8_t byte_data[0];
 };
 
@@ -57,7 +64,7 @@ union rx_buf_union {
      *                                 |<----------------NBITS---------------->|  |<>|--ignored
      *                                 | (MSB)      brightness data      (LSB) |  |<>|--ignored
      */
-    struct __attribute__((packed)) { uint32_t framebuf[32]; uint8_t end[0]; } set_fb_rq;
+    struct __attribute__((packed)) { uint16_t framebuf[32]; uint8_t end[0]; } set_fb_rq;
     uint8_t byte_data[0];
     uint32_t mac_data;
 };
