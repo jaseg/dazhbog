@@ -66,9 +66,6 @@ uint32_t sys_time_seconds = 0;
 #define A TIMER_CYCLES_FOR_SPI_TRANSMISSIONS
 #define B 40
 
-/* This is a constant offset containing some empirically determined correction values */
-#define C 0
-
 /* This lookup table maps bit positions to timer period values. This is a lookup table to allow for the compensation for
  * non-linear effects of ringing at lower bit durations.
  */
@@ -79,15 +76,15 @@ static uint16_t timer_period_lookup[NBITS] = {
     A + 9,
     A + 29,
     A + 71,
-    A - C + (B<< 2),
-    A - C + (B<< 3),
-    A - C + (B<< 4),
-    A - C + (B<< 5),
-    A - C + (B<< 6),
-    A - C + (B<< 7),
-    A - C + (B<< 8),
-    A - C + (B<< 9),
-    A - C + (B<<10),
+    A + (B<< 2),
+    A + (B<< 3),
+    A + (B<< 4),
+    A + (B<< 5),
+    A + (B<< 6),
+    A + (B<< 7),
+    A + (B<< 8),
+    A + (B<< 9),
+    A + (B<<10),
     /* MSB here */
 };
 
