@@ -76,9 +76,9 @@ static uint16_t timer_period_lookup[NBITS] = {
     /* LSB here */
     A + 1,
     A + 3,
-    A + 10,
+    A + 9,
     A + 29,
-    A + 70,
+    A + 71,
     A - C + (B<< 2),
     A - C + (B<< 3),
     A - C + (B<< 4),
