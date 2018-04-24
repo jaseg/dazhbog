@@ -92,13 +92,13 @@ if __name__ == '__main__':
     uut.send_framebuf([0]*uut.nchannels)
     time.sleep(args.wait)
     readings = [ bp.adc_value for _ in range(args.oversample) ]
-    mean, stdev = statistics.mean(readings), statistics.stdev(readings)
+    zero_mean, stdev = statistics.mean(readings), statistics.stdev(readings)
     cur.execute('''
         INSERT INTO measurements (
                 run_id, channel, duty_cycle, voltage, voltage_stdev, timestamp
             ) VALUES (?, -1, 0, ?, ?, ?)''',
-            (run_id, mean, stdev, time.time()))
-    print('Zero cal: {:5.4f}V stdev={:5.4f}V'.format(mean, stdev))
+            (run_id, zero_mean, stdev, time.time()))
+    print('Zero cal: {:5.4f}V stdev={:5.4f}V'.format(zero_mean, stdev))
 
     for ch in channels:
         for i in range(nbits):
@@ -123,7 +123,7 @@ if __name__ == '__main__':
                         ) VALUES (?, ?, ?, ?, ?, ?)''',
                         (run_id, ch, duty_cycle, mean, stdev, time.time()))
                 print('{:08d} ch={} {:04x}({:6.5f}): {:5.4f} stdev {:5.4f}'.format(
-                    cur.lastrowid, ch, val, duty_cycle, mean, stdev))
+                    cur.lastrowid, ch, val, duty_cycle, mean-zero_mean, stdev))
 
     uut.send_framebuf([0]*uut.nchannels)
     bp.power_on = False
