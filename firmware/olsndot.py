@@ -112,8 +112,8 @@ class Olsndot:
 
     def __str__(self):
         st = self.fetch_status()
-        return '<Olsndot@{} {}.{} {}ch*{} up {}s vcc {:4.3}V temp {}C>'.format(
-                self.addr, self.fw_ver, self.hw_ver, self.nchannels, self.channel_format,
+        return '<Olsndot {}.{}@{} {}ch*{} up {}s vcc {:4.3}V temp {}C>'.format(
+                self.fw_ver, self.hw_ver, self.addr, self.nchannels, self.channel_format,
                 st.uptime_s, st.vcc_mv/1000, st.temp_celsius)
 
     @property

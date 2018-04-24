@@ -77,20 +77,20 @@ uint32_t sys_time_seconds = 0;
  */
 static uint16_t timer_period_lookup[NBITS] = {
     /* LSB here */
-    A - C + (B<< 0),
-    A - C + (B<< 1),
-    A - C + (B<< 2),
-    A - C + (B<< 3),
-    A - C + (B<< 4),
-    A - C + (B<< 5),
-    A - C + (B<< 6),
-    A - C + (B<< 7),
-    A - C + (B<< 8),
-    A - C + (B<< 9),
-    A - C + (B<<10),
-    A - C + (B<<11),
-    A - C + (B<<12),
-    A - C + (B<<13),
+    A + (B<< 0) - C,
+    A + (B<< 1) - C,
+    A + (B<< 2) - C,
+    A + (B<< 3) - C,
+    A + (B<< 4) - C,
+    A + (B<< 5) - C,
+    A + (B<< 6) - C,
+    A + (B<< 7) - C,
+    A + (B<< 8) - C,
+    A + (B<< 9) - C,
+    A + (B<<10) - C,
+    A + (B<<11) - C,
+    A + (B<<12) - C,
+    A + (B<<13) - C,
     /* MSB here */
 };
 
@@ -182,7 +182,7 @@ int main(void) {
     /* Configure TIM1 for display strobe generation */
     TIM1->CR1 = TIM_CR1_ARPE;
 
-    TIM1->PSC = 1; /* Prescale by 2, resulting in a 16MHz timer frequency and 62.5ns timer step size. */
+    TIM1->PSC = 1; /* Prescale by 2, resulting in a 15MHz timer frequency and 66.7ns timer step size. */
     /* CH2 - clear/!MR, CH3 - strobe/STCP */
     TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE | (6<<TIM_CCMR2_OC4M_Pos);
     TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC3NE | TIM_CCER_CC3P | TIM_CCER_CC3NP | TIM_CCER_CC4E;
