@@ -21,7 +21,7 @@
  * in main.c.  */
 #define NBITS 14
 
-#define NCHANNELS 32
+#define NCHANNELS 8
 #define CHANNEL_SPEC 'H'
 #define COLOR_SPEC COLOR_SPEC_RGBW
 #define DEVICE_TYPE OLSNDOT_V1

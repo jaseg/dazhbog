@@ -253,7 +253,7 @@ void do_transpose(void) {
     for (uint32_t i=0; i<NBITS; i++) {
         uint32_t mask = 1<<i<<(MAX_BITS-NBITS); /* Bit mask for this bit value. */
         uint32_t bv = 0; /* accumulator thing */
-        for (uint32_t j=0; j<32; j++)
+        for (uint32_t j=0; j<NCHANNELS; j++)
             if (rx_buf.set_fb_rq.framebuf[j] & mask)
                 bv |= 1<<j;
         brightness_by_bit[i] = bv;
@@ -287,9 +287,11 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {
          * capture/compare channel 3 complementary outputs. The dead-time generator is used to sequence the clear and
          * strobe edges one after another. Since there may be small variations in IRQ service latency it is critical to
          * allow for some leeway between the end of this data transmission and strobe and clear. */
-        SPI1->DR = (val&0xffff);
-        while (SPI1->SR & SPI_SR_BSY);
+#if NCHANNELS > 16
         SPI1->DR = (val>>16);
+        while (SPI1->SR & SPI_SR_BSY);
+#endif
+        SPI1->DR = (val&0xffff);
         while (SPI1->SR & SPI_SR_BSY);
 
         /* Increment the bit index for the next cycle */

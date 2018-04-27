@@ -64,7 +64,7 @@ union rx_buf_union {
      *                                 |<----------------NBITS---------------->|  |<>|--ignored
      *                                 | (MSB)      brightness data      (LSB) |  |<>|--ignored
      */
-    struct __attribute__((packed)) { uint16_t framebuf[32]; uint8_t end[0]; } set_fb_rq;
+    struct __attribute__((packed)) { uint16_t framebuf[NCHANNELS]; uint8_t end[0]; } set_fb_rq;
     uint8_t byte_data[0];
     uint32_t mac_data;
 };
