@@ -52,7 +52,7 @@ uint32_t sys_time_seconds = 0;
 /* This value sets how long a batch of ADC conversions used for temperature measurement is started before the end of the
  * longest cycle. Here too the above caveats apply.
  *
- * This value is in TIM1/TIM3 timer counts. */
+ * This value is in TIM1 timer counts. */
 #define ADC_PRETRIGGER 300 /* trigger with about 12us margin to TIM1 CC IRQ */
 
 /* This value is a constant offset added to every bit period to allow for the timer IRQ handler to execute. This is set
@@ -127,7 +127,6 @@ int main(void) {
     /* Enable all the periphery we need */
     RCC->AHBENR  |= RCC_AHBENR_GPIOAEN | RCC_AHBENR_GPIOBEN | RCC_AHBENR_DMAEN;
     RCC->APB2ENR |= RCC_APB2ENR_SPI1EN | RCC_APB2ENR_TIM1EN | RCC_APB2ENR_USART1EN | RCC_APB2ENR_ADCEN;
-    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
 
     /* Configure all the GPIOs */
     GPIOA->MODER |=
@@ -193,19 +192,6 @@ int main(void) {
 
     /* Pre-load initial values, kick of first interrupt */
     TIM1->EGR |= TIM_EGR_UG;
-
-    /* Configure TIM3 for USART timeout handing */
-    TIM3->CR1 = TIM_CR1_OPM;
-    TIM3->DIER = TIM_DIER_UIE;
-    TIM3->PSC = 30;
-    TIM3->ARR = 1000;
-
-    /* Configure Timer 3 update (overrun) interrupt on NVIC.  Used only for update (overrun) for USART timeout handling. */
-    NVIC_EnableIRQ(TIM3_IRQn);
-    NVIC_SetPriority(TIM3_IRQn, 2);
-
-    /* Pre-load initial values */
-    TIM3->EGR |= TIM_EGR_UG;
 
     /* Configure UART for RS485 comm */
     /* 8N1, 1MBd */
@@ -304,49 +290,18 @@ void TIM1_BRK_UP_TRG_COM_IRQHandler(void) {
         TIM1->ARR = RESET_PERIOD_LENGTH;
         TIM1->CCR3 = 2; /* This value is fixed to produce a very short reset pulse. IOs, PCB and shift registers all can
                            easily handle this. */
+        TIM1->CCR2 = 3;
     } else {
         /* Set up everything for the data cycle of the *next* period. The timer is set to count from 0 to ARR. ARR and
          * CCR3 are pre-loaded, so the values written above will only be latched on timer overrun at the end of this
          * period. This is a little complicated, but doing it this way has the advantage of keeping both duty cycle and
          * frame rate precisely constant. */
         TIM1->CCR3 = TIMER_CYCLES_FOR_SPI_TRANSMISSIONS;
+        TIM1->CCR2 = TIMER_CYCLES_FOR_SPI_TRANSMISSIONS+1;
         TIM1->ARR = timer_period_lookup[idx];
     }
     /* Reset the update interrupt flag. This ISR handler routine is only used for timer update events. */
     TIM1->SR &= ~TIM_SR_UIF_Msk;
-}
-
-/* The data format of the serial command interface.
- *
- * The serial interface uses short packets. Currently, there is only one packet type defined: a "set RGBW" packet, using
- * command ID 0x23. The packet starts with the command ID, followed by the addressed channel group, followed by four
- * times two bytes of big-endian RGBW channel data.
- *
- *
- */
-union packet {
-    struct {
-        uint8_t cmd; /* 0x23 */
-        uint8_t step; /* logical channel. The USART_CHANNEL_OFFX is applied on this number below. */
-        union {
-            uint16_t rgbw[4];
-            struct {
-                uint16_t r, g, b, w;
-            };
-        };
-    } set_step;
-    uint8_t data[0];
-};
-
-int rxpos = 0;
-void TIM3_IRQHandler(void) {
-    TIM3->SR &= ~TIM_SR_UIF;
-    /*
-    if (rxpos != sizeof(union packet)) {
-        asm("bkpt");
-    }
-    */
-    rxpos = 0;
 }
 
 /* Misc IRQ handlers */
