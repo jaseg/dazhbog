@@ -176,7 +176,7 @@ int main(void) {
     /* Configure TIM1 for display strobe generation */
     TIM1->CR1 = TIM_CR1_ARPE;
 
-    TIM1->PSC = 0; /* Prescale by 2, resulting in a 15MHz timer frequency and 66.7ns timer step size. */
+    TIM1->PSC = 0; /* Do not prescale, resulting in a 30MHz timer frequency and 33.3ns timer step size. */
     /* CH2 - clear/!MR, CH3 - strobe/STCP */
     TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE | (6<<TIM_CCMR2_OC4M_Pos);
     TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC3NE | TIM_CCER_CC3P | TIM_CCER_CC3NP | TIM_CCER_CC4E;
