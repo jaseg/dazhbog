@@ -138,11 +138,8 @@ int main(void) {
         | (2<<GPIO_MODER_MODER5_Pos)  /* PA5  - Shift register clk/SCLK */
         | (1<<GPIO_MODER_MODER6_Pos)  /* PA6  - LED2 open-drain output */
         | (2<<GPIO_MODER_MODER7_Pos)  /* PA7  - Shift register data/MOSI */
-        | (2<<GPIO_MODER_MODER9_Pos)  /* FIXME PA9  - Shift register clear (TIM1_CH2) */
+        | (2<<GPIO_MODER_MODER9_Pos)  /* PA9  - Shift register clear (TIM1_CH2) */
         | (2<<GPIO_MODER_MODER10_Pos);/* PA10 - Shift register strobe (TIM1_CH3) */
-    GPIOB->MODER |=
-          (2<<GPIO_MODER_MODER1_Pos); /* PB1  - Shift register clear (TIM1_CH3N) */
-
 
     GPIOA->OTYPER |= GPIO_OTYPER_OT_6; /* LED outputs -> open drain */
 
@@ -151,9 +148,8 @@ int main(void) {
           (3<<GPIO_OSPEEDR_OSPEEDR5_Pos)  /* SCLK   */
         | (3<<GPIO_OSPEEDR_OSPEEDR6_Pos)  /* LED1   */
         | (3<<GPIO_OSPEEDR_OSPEEDR7_Pos)  /* MOSI   */
+        | (3<<GPIO_OSPEEDR_OSPEEDR9_Pos)  /* Clear   */
         | (3<<GPIO_OSPEEDR_OSPEEDR10_Pos);/* Strobe */
-    GPIOB->OSPEEDR |=
-          (3<<GPIO_OSPEEDR_OSPEEDR1_Pos); /* Clear  */
 
     /* Alternate function settings */
     GPIOA->AFR[0] |=
@@ -163,9 +159,8 @@ int main(void) {
         | (0<<GPIO_AFRL_AFRL5_Pos)   /* SPI1_SCK  */
         | (0<<GPIO_AFRL_AFRL7_Pos);  /* SPI1_MOSI */
     GPIOA->AFR[1] |=
-          (2<<GPIO_AFRH_AFRH2_Pos);  /* TIM1_CH3  */
-    GPIOB->AFR[0] |=
-          (2<<GPIO_AFRL_AFRL1_Pos);  /* TIM1_CH3N */
+          (2<<GPIO_AFRH_AFRH1_Pos)   /* TIM1_CH2 */
+        | (2<<GPIO_AFRH_AFRH2_Pos);  /* TIM1_CH3  */
 
     /* Configure SPI controller */
     /* CPOL=0, CPHA=0, prescaler=2 -> 16MBd */
@@ -177,13 +172,15 @@ int main(void) {
 
     TIM1->PSC = 0; /* Do not prescale, resulting in a 30MHz timer frequency and 33.3ns timer step size. */
     /* CH2 - clear/!MR, CH3 - strobe/STCP */
+    TIM1->CCMR1 = (6<<TIM_CCMR1_OC2M_Pos) | TIM_CCMR1_OC2PE;
     TIM1->CCMR2 = (6<<TIM_CCMR2_OC3M_Pos) | TIM_CCMR2_OC3PE | (6<<TIM_CCMR2_OC4M_Pos);
-    TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC3NE | TIM_CCER_CC3P | TIM_CCER_CC3NP | TIM_CCER_CC4E;
-    TIM1->BDTR = TIM_BDTR_MOE | (1<<TIM_BDTR_DTG_Pos); /* really short dead time */
+    TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC2E | TIM_CCER_CC3P | TIM_CCER_CC4E;
+    TIM1->BDTR = TIM_BDTR_MOE;
     TIM1->DIER = TIM_DIER_UIE; /* Enable update (overrun) interrupt */
     TIM1->ARR = 1;
     TIM1->CR1 |= TIM_CR1_CEN;
-    /* Trigger at the end of the longest bit cycle. This means this does not trigger in shorter bit cycles. */
+    /* TIM1 CC channel 4 is used to trigger an ADC run at the end of the longest bit cycle. This is done by setting a
+     * value that is large enough to not trigger in shorter bit cycles. */
     TIM1->CCR4  = timer_period_lookup[NBITS-1] - ADC_PRETRIGGER;
 
     /* Configure Timer 1 update (overrun) interrupt on NVIC.  Used only for update (overrun) for strobe timing. */
