@@ -17,7 +17,7 @@ if __name__ == '__main__':
         step, = db.execute(
                 'SELECT MAX(step) FROM measurements WHERE run_id = (SELECT MAX(run_id) FROM runs)'
                 ).fetchone()
-        return int(step)+1
+        return int(step)
 
     def step_gen():
         while True:
@@ -28,5 +28,9 @@ if __name__ == '__main__':
             time.sleep(args.update_delay)
 
     bar = tqdm.tqdm(total=args.max_step)
-    for step in step_gen():
-        bar.update(step - bar.n)
+    while True:
+        try:
+            for step in step_gen():
+                bar.update(step - bar.n)
+        except:
+            time.sleep(args.update_delay)

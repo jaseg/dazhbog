@@ -14,10 +14,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('run_name', nargs='?', default='auto')
     parser.add_argument('buspirate_port', nargs='?', default='/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_AD01W1RF-if00-port0')
-    parser.add_argument('-s', '--steps', type=int, nargs='?', default=100, help='Steps to run through')
+    parser.add_argument('-s', '--steps', type=int, nargs='?', default=400, help='Steps to run through')
+    parser.add_argument('-k', '--skip', type=int, nargs='?', default=2, help='Steps skip between measurements for shorter runtime')
     parser.add_argument('-d', '--database', default='spectra.sqlite3', help='sqlite3 database file to store results in')
-    parser.add_argument('-w', '--wait', type=float, default=0.1, help='time to wait between samples in seconds')
-    parser.add_argument('-o', '--oversample', type=int, default=16, help='oversampling ratio')
+    parser.add_argument('-w', '--wait', type=float, default=2.0, help='time to wait between samples in seconds')
+    parser.add_argument('-o', '--oversample', type=int, default=32, help='oversampling ratio')
+    parser.add_argument('-c', '--comment', help='run comment')
     args = parser.parse_args()
 
     db = sqlite3.connect(args.database)
@@ -80,8 +82,8 @@ if __name__ == '__main__':
         run_name += str(1+max(int(n) if str.isnumeric(n) else 0 for n in names))
     with db:
         cur = db.cursor()
-        cur.execute('INSERT INTO runs(name, timestamp) VALUES (?, ?)',
-                (run_name, time.time()))
+        cur.execute('INSERT INTO runs(name, comment, timestamp) VALUES (?, ?, ?)',
+                (run_name, args.comment, time.time()))
         run_id = cur.lastrowid
 
     print('Starting run {} "{}" at {:%y-%m-%d %H:%M:%S:%f}'.format(run_id, run_name, datetime.now()))
@@ -92,8 +94,7 @@ if __name__ == '__main__':
         bp.step()
 
     bp.stepper_direction('up')
-    for step in range(args.steps):
-        bp.step()
+    for step in range(0, args.steps+args.skip, args.skip): # Run one skip past end to capture both interval boundaries
         for led_val in [0, 1]:
             try:
                 bp.led(led_val)
@@ -115,8 +116,10 @@ if __name__ == '__main__':
                 raise
             except TypeError as e:
                 print('Buspirate hiccup, ignoring:', e)
+        for _ in range(args.skip):
+            bp.step()
 
     bp.stepper_direction('down')
-    for _ in range(args.steps):
+    for _ in range(args.steps+args.skip):
         bp.step()
 

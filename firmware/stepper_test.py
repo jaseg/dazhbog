@@ -27,27 +27,32 @@ if __name__ == '__main__':
 
     def stepper_step():
         bp.cs = 1
-        time.sleep(0.005)
+        #time.sleep(0.005)
         bp.cs = 0
-        time.sleep(0.005)
+        #time.sleep(0.005)
 
     import curses
     screen = curses.initscr()
     curses.noecho()
     curses.cbreak()
     screen.keypad(True)
+    i = 0
     try:
         while True:
             key = screen.getch()
             if key == ord('q'):
                 break
 
+            screen.addstr('{: 4}'.format(i))
+
             if key == curses.KEY_DOWN:
                 stepper_direction_down()
                 stepper_step()
+                i -= 1
             elif key == curses.KEY_UP:
                 stepper_direction_up()
                 stepper_step()
+                i += 1
 
     finally:
         curses.nocbreak()
