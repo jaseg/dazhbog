@@ -3,7 +3,6 @@
 import time
 import statistics
 import sqlite3
-from olsndot import Olsndot, Driver
 from datetime import datetime
 
 from pyBusPirateLite import BitBang
@@ -12,34 +11,38 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('run_name', nargs='?', default='auto')
-    parser.add_argument('buspirate_port', nargs='?', default='/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_AD01W1RF-if00-port0')
     parser.add_argument('-s', '--steps', type=int, nargs='?', default=400, help='Steps to run through')
     parser.add_argument('-k', '--skip', type=int, nargs='?', default=2, help='Steps skip between measurements for shorter runtime')
     parser.add_argument('-d', '--database', default='spectra.sqlite3', help='sqlite3 database file to store results in')
     parser.add_argument('-w', '--wait', type=float, default=2.0, help='time to wait between samples in seconds')
     parser.add_argument('-o', '--oversample', type=int, default=32, help='oversampling ratio')
+    parser.add_argument('-g', '--gain', type=float, default=None, help='Transimpedance gain of amplifier in MOhm')
     parser.add_argument('-c', '--comment', help='run comment')
+    parser.add_argument('-p', '--port', default='/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_AD01W1RF-if00-port0', help='Serial port device of the control buspirate')
+    parser.add_argument('run_name', nargs='?', default='auto')
+    parser.add_argument('color', help='Captured color channel')
     args = parser.parse_args()
 
     db = sqlite3.connect(args.database)
     db.execute("""
         CREATE TABLE IF NOT EXISTS runs (
-                run_id INTEGER PRIMARY KEY,
+                capture_id INTEGER PRIMARY KEY,
                 name TEXT,
                 comment TEXT,
+                color TEXT, -- Captured color channel
+                gain REAL, -- Preamplifier transimpedance in Ohms
                 timestamp REAL -- unix timestamp in fractional seconds
                 )""")
     db.execute("""
         CREATE TABLE IF NOT EXISTS measurements (
                 measurement_id INTEGER PRIMARY KEY,
-                run_id INTEGER,
+                capture_id INTEGER,
                 led_on INTEGER,
                 step INTEGER,
                 voltage REAL, -- volts
                 voltage_stdev REAL, -- volts
                 timestamp REAL, -- unix timestamp in fractional seconds
-                FOREIGN KEY (run_id) REFERENCES runs)""")
+                FOREIGN KEY (capture_id) REFERENCES runs)""")
 
     class BPState:
         def __init__(self, port):
@@ -72,7 +75,7 @@ if __name__ == '__main__':
             self.reinit()
             return [ self.bp.adc_value for _ in range(oversampling) ]
 
-    bp = BPState(args.buspirate_port)
+    bp = BPState(args.port)
 
     run_name = args.run_name
     if not str.isnumeric(args.run_name[-1]):
@@ -82,11 +85,11 @@ if __name__ == '__main__':
         run_name += str(1+max(int(n) if str.isnumeric(n) else 0 for n in names))
     with db:
         cur = db.cursor()
-        cur.execute('INSERT INTO runs(name, comment, timestamp) VALUES (?, ?, ?)',
-                (run_name, args.comment, time.time()))
-        run_id = cur.lastrowid
+        cur.execute('INSERT INTO runs(name, comment, color, gain, timestamp) VALUES (?, ?, ?, ?, ?)',
+                (run_name, args.comment, args.color, args.gain*1e6, time.time()))
+        capture_id = cur.lastrowid
 
-    print('Starting run {} "{}" at {:%y-%m-%d %H:%M:%S:%f}'.format(run_id, run_name, datetime.now()))
+    print('Starting run {} "{}" at {:%y-%m-%d %H:%M:%S:%f}'.format(capture_id, run_name, datetime.now()))
     print('[measurement id] " " [step number] " " [reading (V)]')
 
     bp.stepper_direction('down')
@@ -107,9 +110,9 @@ if __name__ == '__main__':
                     cur = db.cursor()
                     cur.execute('''
                         INSERT INTO measurements (
-                                run_id, led_on, step, voltage, voltage_stdev, timestamp
+                                capture_id, led_on, step, voltage, voltage_stdev, timestamp
                             ) VALUES (?, ?, ?, ?, ?, ?)''',
-                            (run_id, led_val, step, mean, stdev, time.time()))
+                            (capture_id, led_val, step, mean, stdev, time.time()))
                     print('{:08d} {:03} {}: {:5.4f} stdev {:5.4f}'.format(
                         cur.lastrowid, step, led_val, mean, stdev))
             except KeyboardInterrupt:

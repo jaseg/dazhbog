@@ -3,7 +3,6 @@
 import time
 import statistics
 import sqlite3
-from olsndot import Olsndot, Driver
 from datetime import datetime
 
 from pyBusPirateLite import BitBang
