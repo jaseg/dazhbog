@@ -77,19 +77,13 @@ if __name__ == '__main__':
 
     bp = BPState(args.port)
 
-    run_name = args.run_name
-    if not str.isnumeric(args.run_name[-1]):
-        names = [ n[len(run_name):] for n, in db.execute(
-            'SELECT name FROM runs WHERE name LIKE ?||"%"', (run_name,)).fetchall() ]
-        names.append('0') # in case we get no results
-        run_name += str(1+max(int(n) if str.isnumeric(n) else 0 for n in names))
     with db:
         cur = db.cursor()
         cur.execute('INSERT INTO runs(name, comment, color, gain, timestamp) VALUES (?, ?, ?, ?, ?)',
-                (run_name, args.comment, args.color, args.gain*1e6, time.time()))
+                (args.run_name, args.comment, args.color, args.gain*1e6, time.time()))
         capture_id = cur.lastrowid
 
-    print('Starting run {} "{}" at {:%y-%m-%d %H:%M:%S:%f}'.format(capture_id, run_name, datetime.now()))
+    print('Starting capture {} "{}" at {:%y-%m-%d %H:%M:%S:%f}'.format(capture_id, args.run_name, datetime.now()))
     print('[measurement id] " " [step number] " " [reading (V)]')
 
     bp.stepper_direction('down')
@@ -98,7 +92,7 @@ if __name__ == '__main__':
 
     bp.stepper_direction('up')
     for step in range(0, args.steps+args.skip, args.skip): # Run one skip past end to capture both interval boundaries
-        for led_val in [0, 1]:
+        for led_val in [1]: # This can be used for self-calibration.
             try:
                 bp.led(led_val)
                 time.sleep(args.wait)
