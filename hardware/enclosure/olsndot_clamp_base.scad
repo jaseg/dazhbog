@@ -1,6 +1,6 @@
 eps = 0.01;
 
-module clamp(l=90, w=20, h=10, d1=40, o=10, hdia1=5, hdia2=10, hd=1, nw=7.8, nd=3, notch_sf=0.75, notch_d=5, notch_a=10, notch_o=1, edge_a=10, edge_d=22) {
+module clamp(l=90, w=20, h=10, d1=25, d2=35, o=10, hdia1=5, hdia2=10, hd=1, nw=7.8, nd=3, notch_sf=0.75, notch_d=2, notch_a=10, notch_o=1, edge_a=5, edge_d=12) {
     translate([-h-l/2, -w/2, 0]) union() {
         translate([l+h-notch_d, 0, 0]) intersection() {
             difference() {
@@ -14,11 +14,11 @@ module clamp(l=90, w=20, h=10, d1=40, o=10, hdia1=5, hdia2=10, hd=1, nw=7.8, nd=
         difference() {
             union() {
                 cube ([l+h, w, h]);
-                cube ([h, w, d1]);
+                cube ([h, w, d2]);
             }
-            rotate([0, 45, 0]) translate([-l/2, -eps/2, -d1/8*7]) cube([l, w+eps, d1]);
-            translate([0, 0, d1]) rotate([0, 90+45, 0]) translate([-l/2, -eps/2, -d1/8*7]) cube([l, w+eps, d1]);
-            translate([-eps/2, w/2, d1-o]) rotate([0, 90, 0]) union() {
+            rotate([0, 45, 0]) translate([-l/2, -eps/2, -d2/8*7]) cube([l, w+eps, d2]);
+            translate([0, 0, d2]) rotate([0, 90+45, 0]) translate([-l/2, -eps/2, -d2/8*7]) cube([l, w+eps, d2]);
+            translate([-eps/2, w/2, d2-o]) rotate([0, 90, 0]) union() {
                 cylinder(d=hdia1, h=l);
                 cylinder(d=hdia2, h=hd);
                 translate([0, 0, h-nd/2]) hexagon(nw, nd+2*eps);
