@@ -13,9 +13,9 @@ module clamp(
     nw=7.8,
     nd=3,
     notch_sf=0.75,
-    notch_d=2,
+    notch_d=3,
     notch_a=10,
-    notch_o=1,
+    notch_o=0.5,
     edge_a=5,
     edge_d=12) {
     translate([-h-l/2, -w/2, 0]) union() {
@@ -54,23 +54,52 @@ nut_depth=5.5;
 nut_off_y = 80/2;
 nut_off_x = 20;
 
-module base($fn=25, cw=90, sw=15, sh=15, strut_spacing=30, clamp_dist=90) {
+module nut_holder(
+    a = 30,
+    b = 15,
+    c = 10,
+    d = 5.0,
+    e = 4.0,
+    ) {
+        
     difference() {
+        union() {
+            translate([-b/2, -(a-b)/2, 0]) cube([b, a-b, c]);
+            translate([0, -(a-b)/2, 0]) cylinder(d=b, h=c);
+            translate([0, (a-b)/2, 0]) cylinder(d=b, h=c);
+        }
+        translate([0,  a/2 - d, -eps]) {
+            translate([0, 0, c-nut_depth+2*eps]) cylinder(d=nut_dia, h=nut_depth);
+            cylinder(d=e, h=c+2*eps);
+        }
+        translate([0, -a/2 + d, -eps]) {
+            translate([0, 0, c-nut_depth+2*eps]) cylinder(d=nut_dia, h=nut_depth);
+            cylinder(d=e, h=c+2*eps);
+        }
+    }
+}
+
+module base($fn=25, cw=90, sw=15, sh=15, strut_spacing=30, clamp_dist=90) {
+    d = 30;
+    clamp(l=cw, h=sh);
+    translate([-d, 0, 0]) nut_holder();
+    translate([d, 0, 0]) nut_holder();
+    /*difference() {
         translate([0, -clamp_dist/2, 0]) union() {
-            translate([0,  clamp_dist, 0]) clamp(l=cw, h=sh);
+    */
             /*
             translate([0,    0, 0]) clamp(l=cw, h=sh);
             translate([-strut_spacing/2-sw, 0, 0]) cube([sw, clamp_dist, sh]);
             translate([ strut_spacing/2, 0, 0]) cube([sw, clamp_dist, sh]);
             */
-        }
+        //}
         /*
         translate([nut_off_x, nut_off_y, -eps]) cylinder(d=nut_dia, h=nut_depth+eps);
         translate([nut_off_x, -nut_off_y, -eps]) cylinder(d=nut_dia, h=nut_depth+eps);
         translate([-nut_off_x, nut_off_y, -eps]) cylinder(d=nut_dia, h=nut_depth+eps);
         translate([-nut_off_x, -nut_off_y, -eps]) cylinder(d=nut_dia, h=nut_depth+eps);
         */
-    }
+    //}
 }
 
 base();
