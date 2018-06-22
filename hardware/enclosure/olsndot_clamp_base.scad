@@ -1,6 +1,23 @@
 eps = 0.01;
 
-module clamp(l=90, w=20, h=10, d1=25, d2=35, o=10, hdia1=5, hdia2=10, hd=1, nw=7.8, nd=3, notch_sf=0.75, notch_d=2, notch_a=10, notch_o=1, edge_a=5, edge_d=12) {
+module clamp(
+    l=90,
+    w=14,
+    h=10,
+    d1=30,
+    d2=35,
+    o=10,
+    hdia1=5,
+    hdia2=10,
+    hd=5,
+    nw=7.8,
+    nd=3,
+    notch_sf=0.75,
+    notch_d=2,
+    notch_a=10,
+    notch_o=1,
+    edge_a=5,
+    edge_d=12) {
     translate([-h-l/2, -w/2, 0]) union() {
         translate([l+h-notch_d, 0, 0]) intersection() {
             difference() {
@@ -19,9 +36,9 @@ module clamp(l=90, w=20, h=10, d1=25, d2=35, o=10, hdia1=5, hdia2=10, hd=1, nw=7
             rotate([0, 45, 0]) translate([-l/2, -eps/2, -d2/8*7]) cube([l, w+eps, d2]);
             translate([0, 0, d2]) rotate([0, 90+45, 0]) translate([-l/2, -eps/2, -d2/8*7]) cube([l, w+eps, d2]);
             translate([-eps/2, w/2, d2-o]) rotate([0, 90, 0]) union() {
-                cylinder(d=hdia1, h=l);
-                cylinder(d=hdia2, h=hd);
-                translate([0, 0, h-nd/2]) hexagon(nw, nd+2*eps);
+                cylinder(d=6, h=l);
+                cylinder(d=12, h=hd);
+                translate([-11/2, -11/2, h-4]) cube([11, 11, 5]);
             }
         }
     }
@@ -37,7 +54,7 @@ nut_depth=5.5;
 nut_off_y = 80/2;
 nut_off_x = 20;
 
-module base($fn=25, cw=90, sw=15, sh=10, strut_spacing=30, clamp_dist=90) {
+module base($fn=25, cw=90, sw=15, sh=15, strut_spacing=30, clamp_dist=90) {
     difference() {
         translate([0, -clamp_dist/2, 0]) union() {
             translate([0,  clamp_dist, 0]) clamp(l=cw, h=sh);

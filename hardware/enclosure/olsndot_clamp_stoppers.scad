@@ -1,7 +1,7 @@
 w = 20;
 h = w;
 d = 5;
-hole_dia = 5;
+hole_dia = 6;
 hole_d = 4;
 hole_fringe = 1.5;
 fringe_extra = 1.0;
