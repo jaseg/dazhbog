@@ -37,3 +37,7 @@ int main(void)
         i++;
     }
 }
+
+void hard_fault_handler(void) {
+    while (23);
+}
