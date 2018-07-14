@@ -1,6 +1,6 @@
 w = 20;
 h = w;
-d = 5;
+d = 7;
 hole_dia = 6;
 hole_d = 4;
 hole_fringe = 1.5;

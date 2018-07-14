@@ -79,7 +79,7 @@ module nut_holder(
     }
 }
 
-module base($fn=25, cw=90, sw=15, sh=15, strut_spacing=30, clamp_dist=90) {
+module base($fn=25, cw=93, sw=15, sh=15, strut_spacing=30, clamp_dist=90) {
     d = 30;
     clamp(l=cw, h=sh);
     translate([-d, 0, 0]) nut_holder();
