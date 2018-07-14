@@ -17,16 +17,16 @@
 
 int main(void)
 {
-	int i = 0;
+    int i = 0;
     // const char* line;
 
     // Clock Setup
     rcc_clock_setup_in_hse_8mhz_out_72mhz();
 
     // Initialize USB
-	usb_serial_init();
+    usb_serial_init();
 
-	while (1) {
+    while (1) {
         /*
         if( i % 100000  == 0 ) {
             // Read ADC
