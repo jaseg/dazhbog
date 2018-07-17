@@ -1,0 +1,6 @@
+[submodule "libopencm3"]
+	path = libopencm3
+	url = ./libopencm3
+[submodule "libopencm3-tests"]
+	path = libopencm3-tests
+	url = ./libopencm3-tests/
