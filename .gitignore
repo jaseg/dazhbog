@@ -1,6 +1,11 @@
 hardware/History
 hardware/Project Logs for olsndot 
 hardware/__Previews
+__pycache__
+.ipynb_checkpoints
+
+*.stl
+
 # Windows image file caches
 Thumbs.db
 ehthumbs.db
