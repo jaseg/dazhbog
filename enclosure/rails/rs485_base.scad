@@ -1,12 +1,12 @@
 eps=0.01;
 
-nut_dia = 5.3;
+nut_dia = 5.4;
 nut_depth=5.5;
 
 bx=71.12;
 by=35.56;
 
-w=8;
+w=10;
 h=5;
 s=30;
 d=w;

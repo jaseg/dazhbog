@@ -63,21 +63,14 @@ static const struct usb_endpoint_descriptor comm_endp[] = {{
     .bDescriptorType = USB_DT_ENDPOINT,
     .bEndpointAddress = 0x83,
     .bmAttributes = USB_ENDPOINT_ATTR_INTERRUPT,
-    .wMaxPacketSize = 16,
-    .bInterval = 255,
+    .wMaxPacketSize = 64,
+    .bInterval = 1,
 }};
 
 static const struct usb_endpoint_descriptor data_endp[] = {{
     .bLength = USB_DT_ENDPOINT_SIZE,
     .bDescriptorType = USB_DT_ENDPOINT,
     .bEndpointAddress = 0x01,
-    .bmAttributes = USB_ENDPOINT_ATTR_BULK,
-    .wMaxPacketSize = 64,
-    .bInterval = 1,
-}, {
-    .bLength = USB_DT_ENDPOINT_SIZE,
-    .bDescriptorType = USB_DT_ENDPOINT,
-    .bEndpointAddress = 0x82,
     .bmAttributes = USB_ENDPOINT_ATTR_BULK,
     .wMaxPacketSize = 64,
     .bInterval = 1,
@@ -105,7 +98,7 @@ static const struct usb_interface_descriptor data_iface[] = {{
     .bDescriptorType = USB_DT_INTERFACE,
     .bInterfaceNumber = 1,
     .bAlternateSetting = 0,
-    .bNumEndpoints = 2,
+    .bNumEndpoints = 1,
     .bInterfaceClass = USB_CLASS_DATA,
     .bInterfaceSubClass = 0,
     .bInterfaceProtocol = 0,
@@ -139,7 +132,7 @@ static const struct usb_config_descriptor config = {
 static const char *usb_strings[] = {
     "Chaos Computer Club Berlin e.V.",
     "bluefnorf",
-    "bf1",
+    "bf2",
 };
 
 
